@@ -38,28 +38,28 @@ const UserCard = ({ user, onRequest, isLoggedIn, currentUserId }) => {
           />
           <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-success rounded-full border-2 border-card" />
         </div>
-        
+
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-semibold text-foreground truncate">
             {user.name}
           </h3>
-          
+
           {user.location && (
             <div className="flex items-center text-sm text-muted-foreground mt-1">
               <MapPin className="w-3 h-3 mr-1" />
               <span className="truncate">{user.location}</span>
             </div>
           )}
-          
+
           <div className="flex items-center space-x-2 mt-2">
             <div className="flex items-center">
-              {renderStars(user.rating)}
+              {renderStars(user.rating || 0)}
             </div>
             <span className="text-sm font-medium text-foreground">
-              {user.rating}
+              {user.rating || 0}
             </span>
             <span className="text-sm text-muted-foreground">
-              ({user.reviews} reviews)
+              ({user.total_reviews || 0} reviews)
             </span>
           </div>
         </div>
@@ -70,16 +70,16 @@ const UserCard = ({ user, onRequest, isLoggedIn, currentUserId }) => {
         <div>
           <h4 className="text-sm font-medium text-foreground mb-2">Skills Offered</h4>
           <div className="flex flex-wrap gap-2">
-            {user.skillsOffered.map((skill, index) => (
+            {(user.skills_offered || []).map((skill, index) => (
               <SkillTag key={index} skill={skill} variant="offered" />
             ))}
           </div>
         </div>
-        
+
         <div>
           <h4 className="text-sm font-medium text-foreground mb-2">Skills Wanted</h4>
           <div className="flex flex-wrap gap-2">
-            {user.skillsWanted.map((skill, index) => (
+            {(user.skills_wanted || []).map((skill, index) => (
               <SkillTag key={index} skill={skill} variant="wanted" />
             ))}
           </div>
@@ -92,7 +92,7 @@ const UserCard = ({ user, onRequest, isLoggedIn, currentUserId }) => {
           <Clock className="w-4 h-4 mr-1" />
           <span>{user.availability}</span>
         </div>
-        
+
         {!isOwnProfile && (
           <Button
             size="sm"

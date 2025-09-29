@@ -10,55 +10,89 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { availabilityOptions } from '../data/sampleData';
-import { useAppStore } from '@/context/AppStore';
+import { getCurrentUserProfile, updateUserProfile } from '../services/userService';
 import { useAuth } from '@/context/AuthContext';
 
 const Profile = ({ isLoggedIn }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { users, currentUserId, updateUser } = useAppStore();
-  const { user: authUser } = useAuth();
-  const currentUser = users.find(u => u.id === currentUserId);
+  const { user } = useAuth();
   const fileInputRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [profileData, setProfileData] = useState(() => currentUser ? ({
-    name: currentUser.name,
-    email: currentUser.email,
-    location: currentUser.location || '',
-    bio: currentUser.bio || '',
-    avatar: currentUser.avatar,
-    skillsOffered: [...currentUser.skillsOffered],
-    skillsWanted: [...currentUser.skillsWanted],
-    availability: currentUser.availability,
-    isPublic: currentUser.isPublic
-  }) : {
-    name: '', email: '', location: '', bio: '', avatar: '', skillsOffered: [], skillsWanted: [], availability: availabilityOptions[0], isPublic: true
+  const [currentUser, setCurrentUser] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileData, setProfileData] = useState({
+    name: '',
+    email: '',
+    location: '',
+    bio: '',
+    avatar: '',
+    skills_offered: [],
+    skills_wanted: [],
+    availability: availabilityOptions[0],
+    is_public: true
   });
 
   const [newSkillOffered, setNewSkillOffered] = useState('');
   const [newSkillWanted, setNewSkillWanted] = useState('');
 
+  // Load user profile data
   useEffect(() => {
-    if (!isLoggedIn || !currentUser) {
+    if (!isLoggedIn || !user) {
       navigate('/login');
+      return;
     }
-  }, [isLoggedIn, navigate, currentUser]);
+
+    const loadProfile = async () => {
+      try {
+        setProfileLoading(true);
+        const profile = await getCurrentUserProfile();
+        if (profile) {
+          setCurrentUser(profile);
+          setProfileData({
+            name: profile.name || '',
+            email: profile.email || '',
+            location: profile.location || '',
+            bio: profile.bio || '',
+            avatar: profile.avatar || '',
+            skills_offered: profile.skills_offered || [],
+            skills_wanted: profile.skills_wanted || [],
+            availability: profile.availability || availabilityOptions[0],
+            is_public: profile.is_public !== false
+          });
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load profile data.',
+          variant: 'destructive'
+        });
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, [isLoggedIn, user, navigate, toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      if (!currentUser) return;
-      updateUser({ ...currentUser, ...profileData });
-      toast({
-        title: "Profile updated!",
-        description: "Your profile has been successfully updated.",
-      });
+      const result = await updateUserProfile(profileData);
+      if (result.success) {
+        setCurrentUser(result.data);
+        toast({
+          title: "Profile updated!",
+          description: "Your profile has been successfully updated.",
+        });
+      } else {
+        throw new Error(result.message);
+      }
     } catch (error) {
+      console.error('Error updating profile:', error);
       toast({
         title: "Error",
         description: "Failed to update profile. Please try again.",
@@ -72,19 +106,19 @@ const Profile = ({ isLoggedIn }) => {
   const handleDiscard = () => {
     if (!currentUser) return;
     setProfileData({
-      name: currentUser.name,
-      email: currentUser.email,
+      name: currentUser.name || '',
+      email: currentUser.email || '',
       location: currentUser.location || '',
       bio: currentUser.bio || '',
-      avatar: currentUser.avatar,
-      skillsOffered: [...currentUser.skillsOffered],
-      skillsWanted: [...currentUser.skillsWanted],
-      availability: currentUser.availability,
-      isPublic: currentUser.isPublic
+      avatar: currentUser.avatar || '',
+      skills_offered: [...(currentUser.skills_offered || [])],
+      skills_wanted: [...(currentUser.skills_wanted || [])],
+      availability: currentUser.availability || availabilityOptions[0],
+      is_public: currentUser.is_public !== false
     });
     setNewSkillOffered('');
     setNewSkillWanted('');
-    
+
     toast({
       title: "Changes discarded",
       description: "All changes have been reset to original values.",
@@ -113,10 +147,10 @@ const Profile = ({ isLoggedIn }) => {
   };
 
   const addSkillOffered = () => {
-    if (newSkillOffered.trim() && !profileData.skillsOffered.includes(newSkillOffered.trim())) {
+    if (newSkillOffered.trim() && !profileData.skills_offered.includes(newSkillOffered.trim())) {
       setProfileData(prev => ({
         ...prev,
-        skillsOffered: [...prev.skillsOffered, newSkillOffered.trim()]
+        skills_offered: [...prev.skills_offered, newSkillOffered.trim()]
       }));
       setNewSkillOffered('');
     }
@@ -125,15 +159,15 @@ const Profile = ({ isLoggedIn }) => {
   const removeSkillOffered = (skill) => {
     setProfileData(prev => ({
       ...prev,
-      skillsOffered: prev.skillsOffered.filter(s => s !== skill)
+      skills_offered: prev.skills_offered.filter(s => s !== skill)
     }));
   };
 
   const addSkillWanted = () => {
-    if (newSkillWanted.trim() && !profileData.skillsWanted.includes(newSkillWanted.trim())) {
+    if (newSkillWanted.trim() && !profileData.skills_wanted.includes(newSkillWanted.trim())) {
       setProfileData(prev => ({
         ...prev,
-        skillsWanted: [...prev.skillsWanted, newSkillWanted.trim()]
+        skills_wanted: [...prev.skills_wanted, newSkillWanted.trim()]
       }));
       setNewSkillWanted('');
     }
@@ -142,12 +176,28 @@ const Profile = ({ isLoggedIn }) => {
   const removeSkillWanted = (skill) => {
     setProfileData(prev => ({
       ...prev,
-      skillsWanted: prev.skillsWanted.filter(s => s !== skill)
+      skills_wanted: prev.skills_wanted.filter(s => s !== skill)
     }));
   };
 
   if (!isLoggedIn) {
     return null;
+  }
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen gradient-hero">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <User className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-semibold text-foreground mb-2">Loading Profile...</h3>
+            <p className="text-muted-foreground">Fetching your profile information.</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -162,15 +212,15 @@ const Profile = ({ isLoggedIn }) => {
             <div />
           </div>
           <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 gradient-primary rounded-full shadow-glow mb-6">
-            <User className="w-8 h-8 text-primary-foreground" />
-          </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Edit Profile
-          </h1>
-          <p className="text-muted-foreground">
-            Update your information and skills to connect with the right people
-          </p>
+            <div className="inline-flex items-center justify-center w-16 h-16 gradient-primary rounded-full shadow-glow mb-6">
+              <User className="w-8 h-8 text-primary-foreground" />
+            </div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              Edit Profile
+            </h1>
+            <p className="text-muted-foreground">
+              Update your information and skills to connect with the right people
+            </p>
           </div>
         </div>
 
@@ -210,7 +260,7 @@ const Profile = ({ isLoggedIn }) => {
             {/* Basic Information */}
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-foreground">Basic Information</h2>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-foreground font-medium">
@@ -273,12 +323,12 @@ const Profile = ({ isLoggedIn }) => {
             {/* Skills Section */}
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-foreground">Skills</h2>
-              
+
               {/* Skills Offered */}
               <div className="space-y-3">
                 <Label className="text-foreground font-medium">Skills I Can Offer</Label>
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {profileData.skillsOffered.map((skill, index) => (
+                  {profileData.skills_offered.map((skill, index) => (
                     <Badge
                       key={index}
                       className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 transition-smooth"
@@ -318,7 +368,7 @@ const Profile = ({ isLoggedIn }) => {
               <div className="space-y-3">
                 <Label className="text-foreground font-medium">Skills I Want to Learn</Label>
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {profileData.skillsWanted.map((skill, index) => (
+                  {profileData.skills_wanted.map((skill, index) => (
                     <Badge
                       key={index}
                       className="bg-accent/10 text-accent border-accent/20 hover:bg-accent/20 transition-smooth"
@@ -358,12 +408,12 @@ const Profile = ({ isLoggedIn }) => {
             {/* Preferences */}
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-foreground">Preferences</h2>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-foreground font-medium">Availability</Label>
-                  <Select 
-                    value={profileData.availability} 
+                  <Select
+                    value={profileData.availability}
                     onValueChange={(value) => handleChange('availability', value)}
                   >
                     <SelectTrigger className="bg-background/50">
@@ -381,22 +431,22 @@ const Profile = ({ isLoggedIn }) => {
                   <Label className="text-foreground font-medium">Profile Visibility</Label>
                   <div className="flex items-center space-x-3 p-3 bg-background/50 rounded-lg">
                     <Switch
-                      checked={profileData.isPublic}
-                      onCheckedChange={(checked) => handleChange('isPublic', checked)}
+                      checked={profileData.is_public}
+                      onCheckedChange={(checked) => handleChange('is_public', checked)}
                     />
                     <div className="flex items-center space-x-2">
-                      {profileData.isPublic ? (
+                      {profileData.is_public ? (
                         <Eye className="w-4 h-4 text-success" />
                       ) : (
                         <EyeOff className="w-4 h-4 text-muted-foreground" />
                       )}
                       <span className="text-sm text-foreground">
-                        {profileData.isPublic ? 'Public' : 'Private'}
+                        {profileData.is_public ? 'Public' : 'Private'}
                       </span>
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {profileData.isPublic 
+                    {profileData.is_public
                       ? 'Your profile is visible to all users'
                       : 'Your profile is hidden from other users'
                     }
@@ -424,7 +474,7 @@ const Profile = ({ isLoggedIn }) => {
                   </div>
                 )}
               </Button>
-              
+
               <Button
                 type="button"
                 variant="outline"

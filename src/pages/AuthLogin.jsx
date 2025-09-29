@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { Mail, Lock, Github, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,16 +9,32 @@ import { useAuth } from '@/context/AuthContext'
 
 const AuthLogin = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { toast } = useToast()
   const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    // Show success message if redirected from OTP verification
+    if (location.state?.message) {
+      toast({ title: 'Success!', description: location.state.message })
+
+      // Pre-fill email if provided
+      if (location.state?.email) {
+        setEmail(location.state.email)
+      }
+
+      // Clear the state to prevent showing message on refresh
+      navigate(location.pathname, { replace: true })
+    }
+  }, [location.state, toast, navigate, location.pathname])
+
   const handleEmailLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
-    
+
     try {
       const result = await signIn(email, password)
       if (!result.success) throw new Error(result.message || 'Invalid credentials')
@@ -26,10 +42,10 @@ const AuthLogin = () => {
       toast({ title: 'Welcome back!', description: 'Logged in successfully.' })
       navigate('/home')
     } catch (err) {
-      toast({ 
-        title: 'Login failed', 
-        description: err.message || 'Try again.', 
-        variant: 'destructive' 
+      toast({
+        title: 'Login failed',
+        description: err.message || 'Try again.',
+        variant: 'destructive'
       })
     } finally {
       setLoading(false)

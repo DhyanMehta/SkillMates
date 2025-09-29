@@ -29,11 +29,18 @@ const AuthSignup = () => {
       const result = await signUp(email, password, { name })
 
       if (!result.success) {
-        throw new Error(result.error)
+        throw new Error(result.message || result.error)
       }
 
-      toast({ title: 'Welcome!', description: 'Account created. Please log in.' })
-      navigate('/login')
+      // Store email for OTP verification
+      localStorage.setItem('signup_email', email)
+
+      toast({
+        title: 'Check your email!',
+        description: 'We sent you a verification code. Please check your inbox.'
+      })
+
+      navigate(`/verify-otp?email=${encodeURIComponent(email)}`)
     } catch (err) {
       const msg = String(err?.message || '')
       const friendly = /already|exists|duplicate/i.test(msg)

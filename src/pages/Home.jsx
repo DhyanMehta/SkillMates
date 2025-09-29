@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Users as UsersIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,33 +7,51 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import UserCard from '../components/UserCard';
 import Pagination from '../components/Pagination';
 import { availabilityOptions } from '../data/sampleData';
-import { useAppStore } from '@/context/AppStore';
+import { getAllUsers } from '../services/userService';
 
 const Home = ({ isLoggedIn, currentUserId }) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const itemsPerPage = 6;
-  const { users } = useAppStore();
+
+  // Load users from Supabase
+  useEffect(() => {
+    const loadUsers = async () => {
+      setLoading(true);
+      try {
+        const allUsers = await getAllUsers();
+        setUsers(allUsers);
+      } catch (error) {
+        console.error('Error loading users:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUsers();
+  }, []);
 
   // Filter and search logic
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
-      if (!user.isPublic) return false;
-      if (user.isBanned) return false;
-      if (user.isProfileApproved === false) return false;
-      
-      const matchesSearch = !searchQuery || 
+      if (!user.is_public) return false;
+      if (user.is_banned) return false;
+      if (user.is_profile_approved === false) return false;
+
+      const matchesSearch = !searchQuery ||
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.skillsOffered.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        user.skillsWanted.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
-      
+        (user.skills_offered || []).some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (user.skills_wanted || []).some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
+
       const matchesAvailability = availabilityFilter === 'all' || user.availability === availabilityFilter;
-      
+
       return matchesSearch && matchesAvailability;
     });
-  }, [searchQuery, availabilityFilter]);
+  }, [users, searchQuery, availabilityFilter]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -100,7 +118,7 @@ const Home = ({ isLoggedIn, currentUserId }) => {
               </SelectContent>
             </Select>
           </div>
-          
+
           {!isLoggedIn && (
             <div className="mt-4 p-4 bg-warning/10 border border-warning/20 rounded-lg">
               <p className="text-sm text-warning-foreground">
@@ -120,51 +138,64 @@ const Home = ({ isLoggedIn, currentUserId }) => {
           </h2>
         </div>
 
-        {/* Users Grid */}
-        {paginatedUsers.length > 0 ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {paginatedUsers.map(user => (
-                <UserCard
-                  key={user.id}
-                  user={user}
-                  onRequest={handleRequest}
-                  isLoggedIn={isLoggedIn}
-                  currentUserId={currentUserId}
-                />
-              ))}
-            </div>
-
-            {/* Pagination */}
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              itemsPerPage={itemsPerPage}
-              totalItems={filteredUsers.length}
-            />
-          </>
-        ) : (
+        {/* Loading State */}
+        {loading ? (
           <div className="text-center py-12">
-            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
               <UsersIcon className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h3 className="text-xl font-semibold text-foreground mb-2">No matches found</h3>
-            <p className="text-muted-foreground">
-              Try adjusting your search terms or filters to find more SkillMates.
-            </p>
-            <Button
-              onClick={() => {
-                setSearchQuery('');
-                setAvailabilityFilter('all');
-                setCurrentPage(1);
-              }}
-              variant="outline"
-              className="mt-4"
-            >
-              Clear Filters
-            </Button>
+            <h3 className="text-xl font-semibold text-foreground mb-2">Loading SkillMates...</h3>
+            <p className="text-muted-foreground">Finding talented people to connect with.</p>
           </div>
+        ) : (
+          <>
+            {/* Users Grid */}
+            {paginatedUsers.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                  {paginatedUsers.map(user => (
+                    <UserCard
+                      key={user.id}
+                      user={user}
+                      onRequest={handleRequest}
+                      isLoggedIn={isLoggedIn}
+                      currentUserId={currentUserId}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={handlePageChange}
+                  itemsPerPage={itemsPerPage}
+                  totalItems={filteredUsers.length}
+                />
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                  <UsersIcon className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">No matches found</h3>
+                <p className="text-muted-foreground">
+                  Try adjusting your search terms or filters to find more SkillMates.
+                </p>
+                <Button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setAvailabilityFilter('all');
+                    setCurrentPage(1);
+                  }}
+                  variant="outline"
+                  className="mt-4"
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

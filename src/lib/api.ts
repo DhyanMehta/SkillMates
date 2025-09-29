@@ -1,9 +1,9 @@
-// LocalStorage-backed API proxies
-import userServiceDefault, { userService as userServiceNamed } from "../services/userService";
-import requestServiceDefault, { requestService as requestServiceNamed } from "../services/requestService";
+// Supabase-backed API services
+import supabaseUserService from "../services/supabaseUserService";
+import supabaseRequestService from "../services/supabaseRequestService";
 
-const userService = userServiceNamed || userServiceDefault;
-const requestService = requestServiceNamed || requestServiceDefault;
+const userService = supabaseUserService;
+const requestService = supabaseRequestService;
 
 export const authApi = {
     register: async (userData: any) => {

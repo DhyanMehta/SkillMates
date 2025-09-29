@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-// Backend removed: using local-only auth state
+import { supabase } from "../lib/supabase";
 
 const AuthContext = createContext();
 
@@ -9,40 +9,235 @@ export const AuthContextProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem('local_user');
-    if (raw) setUser(JSON.parse(raw));
-    setLoading(false);
+    // Get initial session
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          // Get user profile from database
+          const { data: profile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          setUser({
+            id: session.user.id,
+            email: session.user.email,
+            name: profile?.name || session.user.email?.split('@')[0] || 'User',
+            ...profile
+          });
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        try {
+          if (session?.user) {
+            // Get user profile from database
+            const { data: profile } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+
+            setUser({
+              id: session.user.id,
+              email: session.user.email,
+              name: profile?.name || session.user.email?.split('@')[0] || 'User',
+              ...profile
+            });
+          } else {
+            setUser(null);
+          }
+        } catch (error) {
+          console.error('Auth state change error:', error);
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const signUp = async (email, _password, userData) => {
-    const newUser = {
-      id: crypto.randomUUID(),
-      name: userData?.name || email.split("@")[0],
-      email,
-    };
-    // Register without logging in
-    localStorage.setItem('local_user', JSON.stringify(newUser));
-    return { success: true, data: newUser };
+  const signUp = async (email, password, userData) => {
+    console.log('SignUp called with:', { email, userData });
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: userData?.name || email.split("@")[0],
+          }
+        }
+      });
+
+      if (error) {
+        setError(error.message);
+        return { success: false, message: error.message };
+      }
+
+      // The user profile will be created automatically by the database trigger
+      return { success: true, data: data.user };
+    } catch (error) {
+      console.error('Error signing up:', error);
+      setError(error.message);
+      return { success: false, message: error.message };
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const signIn = async (email, _password) => {
-    const raw = localStorage.getItem('local_user');
-    const existing = raw ? JSON.parse(raw) : null;
-    if (existing && String(existing.email || '').toLowerCase() === String(email || '').toLowerCase()) {
-      setUser(existing);
-      return { success: true, data: existing };
+  const signIn = async (email, password) => {
+    console.log('SignIn called with:', { email });
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        setError(error.message);
+        return { success: false, message: error.message };
+      }
+
+      return { success: true, data: data.user };
+    } catch (error) {
+      console.error('Error signing in:', error);
+      setError(error.message);
+      return { success: false, message: error.message };
+    } finally {
+      setLoading(false);
     }
-    return { success: false, message: 'Account not found. Please sign up.' };
   };
 
   const signOut = async () => {
+    console.log('SignOut called');
+
     try {
-      localStorage.removeItem('local_user');
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Error signing out:', error);
+        return { success: false, message: error.message };
+      }
       setUser(null);
       return { success: true };
     } catch (error) {
       console.error('Error signing out:', error);
-      return { success: false, message: 'Error signing out' };
+      return { success: false, message: error.message };
+    }
+  };
+
+  const resetPassword = async (email) => {
+    console.log('ResetPassword called with:', { email });
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`
+      });
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      return { success: true, message: 'Password reset email sent!' };
+    } catch (error) {
+      console.error('Error sending reset email:', error);
+      return { success: false, message: error.message };
+    }
+  };
+
+  const updatePassword = async (newPassword) => {
+    console.log('UpdatePassword called');
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      return { success: true, message: 'Password updated successfully!' };
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return { success: false, message: error.message };
+    }
+  };
+
+  const verifyOTP = async (email, token) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'signup'
+      });
+
+      if (error) {
+        setError(error.message);
+        return { success: false, message: error.message };
+      }
+
+      return { success: true, data: data.user };
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      setError(error.message);
+      return { success: false, message: error.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendOTP = async (email) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email
+      });
+
+      if (error) {
+        setError(error.message);
+        return { success: false, message: error.message };
+      }
+
+      return { success: true, message: 'OTP resent successfully!' };
+    } catch (error) {
+      console.error('Error resending OTP:', error);
+      setError(error.message);
+      return { success: false, message: error.message };
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -51,13 +246,17 @@ export const AuthContextProvider = ({ children }) => {
     signUp,
     signIn,
     signOut,
+    resetPassword,
+    updatePassword,
+    verifyOTP,
+    resendOTP,
     loading,
     error
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

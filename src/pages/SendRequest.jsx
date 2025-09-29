@@ -7,49 +7,86 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import SkillTag from '../components/SkillTag';
-import { useAppStore } from '@/context/AppStore';
+import { getUserById, getCurrentUserProfile } from '../services/userService';
+import { requestService } from '../services/requestService';
+import { useAuth } from '../context/AuthContext';
 
 const SendRequest = ({ isLoggedIn }) => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+  const { user } = useAuth();
+
   const [targetUser, setTargetUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     offeredSkill: '',
     requestedSkill: '',
     message: ''
   });
   const [isLoading, setIsLoading] = useState(false);
-  const { users, currentUserId, sendRequest } = useAppStore();
-  const currentUser = users.find(u => u.id === currentUserId) || null;
 
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (!isLoggedIn || !user) {
       navigate('/login');
       return;
     }
 
-    const user = users.find(u => u.id === parseInt(userId));
-    if (!user) {
-      navigate('/');
-      return;
-    }
-    if (!currentUser) {
-      navigate('/profile');
-      return;
-    }
-    if (currentUser.id === user.id) {
-      navigate('/home');
-      return;
-    }
-    
-    setTargetUser(user);
-  }, [userId, isLoggedIn, navigate]);
+    const loadData = async () => {
+      try {
+        setLoading(true);
+
+        // Load current user profile
+        const currentProfile = await getCurrentUserProfile();
+        if (!currentProfile) {
+          navigate('/profile');
+          return;
+        }
+        setCurrentUser(currentProfile);
+
+        // Load target user
+        const targetUserResult = await getUserById(userId);
+        if (!targetUserResult.success || !targetUserResult.data) {
+          toast({
+            title: 'User not found',
+            description: 'The user you\'re trying to contact doesn\'t exist.',
+            variant: 'destructive'
+          });
+          navigate('/');
+          return;
+        }
+
+        if (currentProfile.id === targetUserResult.data.id) {
+          toast({
+            title: 'Invalid request',
+            description: 'You cannot send a request to yourself.',
+            variant: 'destructive'
+          });
+          navigate('/');
+          return;
+        }
+
+        setTargetUser(targetUserResult.data);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load user information.',
+          variant: 'destructive'
+        });
+        navigate('/');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [userId, isLoggedIn, user, navigate, toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.offeredSkill || !formData.requestedSkill) {
       toast({
         title: "Missing information",
@@ -62,21 +99,24 @@ const SendRequest = ({ isLoggedIn }) => {
     setIsLoading(true);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      sendRequest({
-        fromUserId: currentUser.id,
+      const result = await requestService.createRequest({
         toUserId: targetUser.id,
         offeredSkill: formData.offeredSkill,
         requestedSkill: formData.requestedSkill,
         message: formData.message,
       });
-      toast({
-        title: "Request sent!",
-        description: `Your request has been sent to ${targetUser.name}.`,
-      });
-      
-      navigate('/requests');
+
+      if (result.success) {
+        toast({
+          title: "Request sent!",
+          description: `Your request has been sent to ${targetUser.name}.`,
+        });
+        navigate('/requests');
+      } else {
+        throw new Error(result.message);
+      }
     } catch (error) {
+      console.error('Error sending request:', error);
       toast({
         title: "Error",
         description: "Failed to send request. Please try again.",
@@ -119,6 +159,26 @@ const SendRequest = ({ isLoggedIn }) => {
     return stars;
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen gradient-hero">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <Send className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-semibold text-foreground mb-2">Loading...</h3>
+            <p className="text-muted-foreground">Preparing your skill request form.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!targetUser || !currentUser) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen gradient-hero">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -133,7 +193,7 @@ const SendRequest = ({ isLoggedIn }) => {
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Home</span>
           </Button>
-          
+
           <div className="text-center flex-1">
             <div className="inline-flex items-center justify-center w-16 h-16 gradient-primary rounded-full shadow-glow mb-4">
               <Send className="w-8 h-8 text-primary-foreground" />
@@ -160,11 +220,11 @@ const SendRequest = ({ isLoggedIn }) => {
                   />
                   <div className="absolute -bottom-1 -right-8 w-4 h-4 bg-success rounded-full border-2 border-card" />
                 </div>
-                
+
                 <h3 className="text-xl font-semibold text-foreground mb-2">
                   {targetUser.name}
                 </h3>
-                
+
                 <div className="flex items-center justify-center space-x-2 mb-4">
                   <div className="flex items-center">
                     {renderStars(targetUser.rating)}
@@ -181,16 +241,16 @@ const SendRequest = ({ isLoggedIn }) => {
                   <div>
                     <h4 className="text-sm font-medium text-foreground mb-2">Skills They Offer</h4>
                     <div className="flex flex-wrap gap-2">
-                      {targetUser.skillsOffered.map((skill, index) => (
+                      {(targetUser.skills_offered || []).map((skill, index) => (
                         <SkillTag key={index} skill={skill} variant="offered" />
                       ))}
                     </div>
                   </div>
-                  
+
                   <div>
                     <h4 className="text-sm font-medium text-foreground mb-2">Skills They Want</h4>
                     <div className="flex flex-wrap gap-2">
-                      {targetUser.skillsWanted.map((skill, index) => (
+                      {(targetUser.skills_wanted || []).map((skill, index) => (
                         <SkillTag key={index} skill={skill} variant="wanted" />
                       ))}
                     </div>
@@ -217,7 +277,7 @@ const SendRequest = ({ isLoggedIn }) => {
                         <SelectValue placeholder="Select a skill you can teach" />
                       </SelectTrigger>
                       <SelectContent>
-                        {currentUser.skillsOffered.map((skill) => (
+                        {(currentUser.skills_offered || []).map((skill) => (
                           <SelectItem key={skill} value={skill}>
                             {skill}
                           </SelectItem>
@@ -241,7 +301,7 @@ const SendRequest = ({ isLoggedIn }) => {
                         <SelectValue placeholder="Select a skill you want to learn" />
                       </SelectTrigger>
                       <SelectContent>
-                        {targetUser.skillsOffered.map((skill) => (
+                        {(targetUser.skills_offered || []).map((skill) => (
                           <SelectItem key={skill} value={skill}>
                             {skill}
                           </SelectItem>
@@ -305,7 +365,7 @@ const SendRequest = ({ isLoggedIn }) => {
                       </div>
                     )}
                   </Button>
-                  
+
                   <Button
                     type="button"
                     variant="outline"
