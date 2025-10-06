@@ -13,23 +13,23 @@ export const getCurrentUserProfile = async () => {
             .select('*')
             .eq('id', user.id)
 
-        .single();            .select('*')
+            .single();            .select('*')
 
-            .eq('id', user.id)
+                .eq('id', user.id)
 
-if (error) throw error;            .single();
+        if (error) throw error;            .single();
 
-return data;
+        return data;
 
     } catch (error) {
-    if (error) throw error;
+        if (error) throw error;
 
-    console.error('Error getting current user profile:', error.message); return data;
+        console.error('Error getting current user profile:', error.message); return data;
 
-    return null;
-} catch (error) {
+        return null;
+    } catch (error) {
 
-} console.error('Error getting current user profile:', error.message);
+    } console.error('Error getting current user profile:', error.message);
 
 }; return null;
 

@@ -43,4 +43,5 @@ export default defineConfig(({ mode }) => ({
     // Increase chunk size warning limit
     chunkSizeWarningLimit: 1000,
   },
+  base: process.env.VITE_BASE_PATH || "SkillMates",
 }));
