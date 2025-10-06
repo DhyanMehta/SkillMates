@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { availabilityOptions } from '../data/sampleData';
-import { getCurrentUserProfile, updateUserProfile } from '../services/userService';
+import userService from '../services/supabaseUserService';
 import { useAuth } from '@/context/AuthContext';
 
 const Profile = ({ isLoggedIn }) => {
@@ -46,8 +46,9 @@ const Profile = ({ isLoggedIn }) => {
     const loadProfile = async () => {
       try {
         setProfileLoading(true);
-        const profile = await getCurrentUserProfile();
-        if (profile) {
+        const result = await userService.getUserProfile(user.id);
+        if (result.success && result.data) {
+          const profile = result.data;
           setCurrentUser(profile);
           setProfileData({
             name: profile.name || '',
@@ -55,11 +56,13 @@ const Profile = ({ isLoggedIn }) => {
             location: profile.location || '',
             bio: profile.bio || '',
             avatar: profile.avatar || '',
-            skills_offered: profile.skills_offered || [],
-            skills_wanted: profile.skills_wanted || [],
+            skills_offered: profile.skillsOffered || [],
+            skills_wanted: profile.skillsWanted || [],
             availability: profile.availability || availabilityOptions[0],
-            is_public: profile.is_public !== false
+            is_public: profile.isPublic !== false
           });
+        } else {
+          throw new Error(result.message || 'Failed to load profile');
         }
       } catch (error) {
         console.error('Error loading profile:', error);
@@ -81,13 +84,35 @@ const Profile = ({ isLoggedIn }) => {
     setIsLoading(true);
 
     try {
-      const result = await updateUserProfile(profileData);
+      // Convert profile data to match AppUser format
+      const updateData = {
+        name: profileData.name,
+        email: profileData.email,
+        location: profileData.location,
+        bio: profileData.bio,
+        avatar: profileData.avatar,
+        skillsOffered: profileData.skills_offered,
+        skillsWanted: profileData.skills_wanted,
+        availability: profileData.availability,
+        isPublic: profileData.is_public
+      };
+
+      const result = await userService.updateUserProfile(user.id, updateData);
       if (result.success) {
         setCurrentUser(result.data);
         toast({
           title: "Profile updated!",
           description: "Your profile has been successfully updated.",
         });
+
+        // Refresh homepage users list if the function exists
+        if (typeof window.refreshHomepageUsers === 'function') {
+          console.log('🔄 Triggering homepage refresh after profile update...');
+          // Add small delay to ensure database update is complete
+          setTimeout(() => {
+            window.refreshHomepageUsers();
+          }, 500);
+        }
       } else {
         throw new Error(result.message);
       }

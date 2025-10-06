@@ -25,24 +25,48 @@ export interface AppUser {
 }
 
 // Convert database row to AppUser format
-const dbRowToAppUser = (row: UserRow): AppUser => ({
-    id: row.id,
-    name: row.name,
-    email: row.email,
-    location: row.location || undefined,
-    avatar: row.avatar || undefined,
-    skillsOffered: row.skills_offered || [],
-    skillsWanted: row.skills_wanted || [],
-    availability: row.availability,
-    rating: Number(row.rating),
-    reviews: row.reviews,
-    isPublic: row.is_public,
-    bio: row.bio || undefined,
-    isBanned: row.is_banned,
-    isProfileApproved: row.is_profile_approved,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-});
+const dbRowToAppUser = (row: UserRow): AppUser => {
+    console.log('🔍 DEBUG: Raw database row for user:', {
+        id: row.id,
+        name: row.name,
+        rating: row.rating,
+        reviews: row.reviews,
+        rating_type: typeof row.rating,
+        reviews_type: typeof row.reviews
+    });
+
+    const rating = Number(row.rating) || 0;
+    const reviews = Number(row.reviews) || 0;
+
+    const mappedUser = {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        location: row.location || undefined,
+        avatar: row.avatar || undefined,
+        skillsOffered: row.skills_offered || [],
+        skillsWanted: row.skills_wanted || [],
+        availability: row.availability || 'Available',
+        rating: rating,
+        reviews: reviews,
+        isPublic: row.is_public !== false,
+        bio: row.bio || undefined,
+        isBanned: row.is_banned || false,
+        isProfileApproved: row.is_profile_approved !== false,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+    };
+
+    console.log('✅ DEBUG: Final mapped user:', {
+        name: mappedUser.name,
+        rating: mappedUser.rating,
+        reviews: mappedUser.reviews,
+        rating_type: typeof mappedUser.rating,
+        reviews_type: typeof mappedUser.reviews
+    });
+
+    return mappedUser;
+};
 
 // Convert AppUser to database update format
 const appUserToDbUpdate = (user: Partial<AppUser>): UserUpdate => ({
@@ -72,6 +96,13 @@ export const userService = {
 
             if (error) {
                 console.error('Error fetching user profile:', error);
+                // Check if error is due to missing table
+                if (error.message.includes('relation "public.users" does not exist')) {
+                    return {
+                        success: false,
+                        message: 'Database not set up. Please run the database schema in Supabase first.'
+                    };
+                }
                 return { success: false, message: error.message };
             }
 
@@ -86,8 +117,36 @@ export const userService = {
         }
     },
 
+    // Get user profile only if it's public (for requests and other public interactions)
+    getPublicUserProfile: async (userId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', userId)
+                .eq('is_public', true)
+                .eq('is_banned', false)
+                .single();
+
+            if (error) {
+                console.error('Error fetching public user profile:', error);
+                return { success: false, message: error.message };
+            }
+
+            if (!data) {
+                return { success: false, message: 'Public user not found' };
+            }
+
+            return { success: true, data: dbRowToAppUser(data) };
+        } catch (error) {
+            console.error('Error in getPublicUserProfile:', error);
+            return { success: false, message: 'An unexpected error occurred' };
+        }
+    },
+
     getAllUsers: async () => {
         try {
+            console.log('🔄 DEBUG: Starting getAllUsers fetch...');
             const { data, error } = await supabase
                 .from('users')
                 .select('*')
@@ -96,14 +155,23 @@ export const userService = {
                 .order('created_at', { ascending: false });
 
             if (error) {
-                console.error('Error fetching users:', error);
+                console.error('❌ DEBUG: Database error:', error);
                 return { success: false, message: error.message };
             }
 
+            console.log('📊 DEBUG: Raw database response:', data);
+            console.log('✅ DEBUG: Users fetched successfully:', data?.length || 0, 'users found');
+
             const users = data?.map(dbRowToAppUser) || [];
+
+            console.log('🎯 DEBUG: Final users array with ratings:');
+            users.forEach(user => {
+                console.log(`   - ${user.name}: rating=${user.rating}, reviews=${user.reviews}`);
+            });
+
             return { success: true, data: users };
         } catch (error) {
-            console.error('Error in getAllUsers:', error);
+            console.error('❌ DEBUG: Exception in getAllUsers:', error);
             return { success: false, message: 'An unexpected error occurred' };
         }
     },

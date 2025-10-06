@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import AuthLogin from "./pages/AuthLogin";
 import AuthSignup from "./pages/AuthSignup";
 import OTPConfirm from "./pages/OTPConfirm";
+import SkillsOnboarding from "./pages/SkillsOnboarding";
 import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import SendRequest from "./pages/SendRequest";
@@ -17,6 +18,15 @@ import Requests from "./pages/Requests";
 import SkillChange from "./pages/SkillChange";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
+import Chat from "./pages/Chat";
+import DatabaseStatus from "./components/DatabaseStatus";
+import DebugInfo from "./components/DebugInfo";
+import ConnectionTest from "./components/ConnectionTest";
+import OnboardingChecker from "./components/OnboardingChecker";
+import OTPDebugTest from "./pages/OTPDebugTest";
+import EmailDeliveryTest from "./pages/EmailDeliveryTest";
+import ChatDebug from "./pages/ChatDebug";
+import DatabaseSetup from "./pages/DatabaseSetup";
 import { AuthContextProvider, useAuth } from "./context/AuthContext";
 
 const queryClient = new QueryClient();
@@ -31,8 +41,6 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 const AppRoutes = () => {
   const { user, loading } = useAuth();
   const isLoggedIn = useMemo(() => Boolean(user), [user]);
-
-  console.log('🎯 App state:', { user: user?.email, loading, isLoggedIn });
 
   if (loading) {
     return (
@@ -49,20 +57,57 @@ const AppRoutes = () => {
     <div className="min-h-screen bg-background">
       <AnnouncementBar />
       <Header />
+      <div className="max-w-7xl mx-auto px-4 py-4">
+        {/* <DebugInfo />
+        <ConnectionTest />
+        <DatabaseStatus /> */}
+      </div>
       <Routes>
-        <Route path="/" element={<Index />} />
+        <Route
+          path="/"
+          element={
+            isLoggedIn ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <Index />
+            )
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            isLoggedIn ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <AuthLogin />
+            )
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            isLoggedIn ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <AuthSignup />
+            )
+          }
+        />
+        <Route path="/verify-otp" element={<OTPConfirm />} />
+        <Route path="/onboarding" element={<SkillsOnboarding />} />
+        {/* <Route path="/debug-otp" element={<OTPDebugTest />} />
+        <Route path="/test-email" element={<EmailDeliveryTest />} /> */}
         <Route
           path="/home"
           element={
-            <Home
-              isLoggedIn={isLoggedIn}
-              currentUserId={isLoggedIn && user ? user.id : null}
-            />
+            <ProtectedRoute>
+              <Home
+                isLoggedIn={isLoggedIn}
+                currentUserId={isLoggedIn && user ? user.id : null}
+              />
+            </ProtectedRoute>
           }
         />
-        <Route path="/login" element={<AuthLogin />} />
-        <Route path="/register" element={<AuthSignup />} />
-        <Route path="/verify-otp" element={<OTPConfirm />} />
         <Route
           path="/profile"
           element={<ProtectedRoute><Profile isLoggedIn={isLoggedIn} /></ProtectedRoute>}
@@ -87,6 +132,15 @@ const AppRoutes = () => {
           path="/admin"
           element={<ProtectedRoute><Admin /></ProtectedRoute>}
         />
+        <Route
+          path="/chat/:requestId"
+          element={<ProtectedRoute><Chat /></ProtectedRoute>}
+        />
+        {/* <Route
+          path="/chat-debug"
+          element={<ProtectedRoute><ChatDebug /></ProtectedRoute>}
+        />
+        <Route path="/database-setup" element={<DatabaseSetup />} /> */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>

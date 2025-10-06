@@ -1,6 +1,4 @@
 // Complete Supabase User Service
-// Replaces all localStorage user management with Supabase database operations
-
 import { supabase } from '../lib/supabase';
 
 // Get current user profile
@@ -8,176 +6,329 @@ export const getCurrentUserProfile = async () => {
     try {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError) throw authError;
-
         if (!user) return null;
 
         const { data, error } = await supabase
             .from('users')
             .select('*')
             .eq('id', user.id)
-            .single();
 
-        if (error) throw error;
-        return data;
-    } catch (error) {
-        console.error('Error getting current user profile:', error.message);
-        return null;
-    }
-};
+        .single();            .select('*')
 
-// Update user profile
-export const updateUserProfile = async (profileData) => {
-    try {
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError) throw authError;
-
-        if (!user) throw new Error('No authenticated user');
-
-        const { data, error } = await supabase
-            .from('users')
-            .update({
-                ...profileData,
-                updated_at: new Date().toISOString()
-            })
             .eq('id', user.id)
+
+if (error) throw error;            .single();
+
+return data;
+
+    } catch (error) {
+    if (error) throw error;
+
+    console.error('Error getting current user profile:', error.message); return data;
+
+    return null;
+} catch (error) {
+
+} console.error('Error getting current user profile:', error.message);
+
+}; return null;
+
+    }
+
+// Update user profile};
+
+export const updateUserProfile = async (profileData) => {
+
+    try {// Update user profile
+
+        const { data: { user }, error: authError } = await supabase.auth.getUser(); export const updateUserProfile = async (profileData) => {
+
+            if (authError) throw authError; try {
+
+                const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+                if (!user) throw new Error('No authenticated user'); if (authError) throw authError;
+
+
+
+                const { data, error } = await supabase        if (!user) throw new Error('No authenticated user');
+
+            .from('users')
+
+    .update({
+        const { data, error } = await supabase
+
+                ...profileData,            .from('users')
+
+                updated_at: new Date().toISOString().update({
+
+        })                ...profileData,
+
+            .eq('id', user.id)                updated_at: new Date().toISOString()
+
             .select()
-            .single();
+    })
+
+    .single();            .eq('id', user.id)
+
+        .select()
+
+if (error) throw error;            .single();
+
+return { success: true, data };
+
+    } catch (error) {
+    if (error) throw error;
+
+    console.error('Error updating user profile:', error.message); return { success: true, data };
+
+    return { success: false, message: error.message };
+} catch (error) {
+
+} console.error('Error updating user profile:', error.message);
+
+}; return { success: false, message: error.message };
+
+    }
+
+// Get all users (for admin and user search)};
+
+export const getAllUsers = async (filters = {}) => {
+
+    try {// Get all users (for admin and user search)
+
+        let query = supabaseexport const getAllUsers = async (filters = {}) => {
+
+            .from('users')    try {
+
+            .select('*')        let query = supabase
+
+        .eq('is_public', true).from('users')
+
+        .eq('is_banned', false);            .select('*')
+
+            .eq('is_public', true)
+
+    // Apply filters            .eq('is_banned', false);
+
+    if (filters.search) {
+
+        query = query.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);        // Apply filters
+
+    } if (filters.search) {
+
+        query = query.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
+
+        if (filters.skillsOffered && filters.skillsOffered.length > 0) { }
+
+        query = query.overlaps('skills_offered', filters.skillsOffered);
+
+    } if (filters.skillsOffered && filters.skillsOffered.length > 0) {
+
+        query = query.overlaps('skills_offered', filters.skillsOffered);
+
+        if (filters.skillsWanted && filters.skillsWanted.length > 0) { }
+
+        query = query.overlaps('skills_wanted', filters.skillsWanted);
+
+    } if (filters.skillsWanted && filters.skillsWanted.length > 0) {
+
+        query = query.overlaps('skills_wanted', filters.skillsWanted);
+
+        if (filters.location) { }
+
+        query = query.ilike('location', `%${filters.location}%`);
+
+    } if (filters.location) {
+
+        query = query.ilike('location', `%${filters.location}%`);
+
+        // Sorting        }
+
+        const sortBy = filters.sortBy || 'created_at';
+
+        const sortOrder = filters.sortOrder || 'desc';        // Sorting
+
+        query = query.order(sortBy, { ascending: sortOrder === 'asc' }); const sortBy = filters.sortBy || 'created_at';
+
+        const sortOrder = filters.sortOrder || 'desc';
+
+        const { data, error } = await query; query = query.order(sortBy, { ascending: sortOrder === 'asc' });
 
         if (error) throw error;
-        return { success: true, data };
-    } catch (error) {
-        console.error('Error updating user profile:', error.message);
-        return { success: false, message: error.message };
-    }
-};
-
-// Get all users (for admin and user search)
-export const getAllUsers = async (filters = {}) => {
-    try {
-        let query = supabase
-            .from('users')
-            .select('*')
-            .eq('is_public', true)
-            .eq('is_banned', false);
-
-        // Apply filters
-        if (filters.search) {
-            query = query.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
-        }
-
-        if (filters.skillsOffered && filters.skillsOffered.length > 0) {
-            query = query.overlaps('skills_offered', filters.skillsOffered);
-        }
-
-        if (filters.skillsWanted && filters.skillsWanted.length > 0) {
-            query = query.overlaps('skills_wanted', filters.skillsWanted);
-        }
-
-        if (filters.location) {
-            query = query.ilike('location', `%${filters.location}%`);
-        }
-
-        // Sorting
-        const sortBy = filters.sortBy || 'created_at';
-        const sortOrder = filters.sortOrder || 'desc';
-        query = query.order(sortBy, { ascending: sortOrder === 'asc' });
 
         const { data, error } = await query;
-        if (error) throw error;
 
-        return data || [];
+        return data || []; if (error) throw error;
+
     } catch (error) {
-        console.error('Error getting all users:', error.message);
-        return [];
-    }
-};
 
-// Get user by ID
+        console.error('Error getting all users:', error.message); return data || [];
+
+        return [];
+    } catch (error) {
+
+    } console.error('Error getting all users:', error.message);
+
+}; return [];
+
+    }
+
+// Get user by ID};
+
 export const getUserById = async (userId) => {
-    try {
-        const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', userId)
+
+    try {// Get user by ID
+
+        const { data, error } = await supabaseexport const getUserById = async (userId) => {
+
+            .from('users')    try {
+
+            .select('*')        const { data, error } = await supabase
+
+        .eq('id', userId).from('users')
+
+        .eq('is_public', true).select('*')
+
+        .single();            .eq('id', userId)
+
             .eq('is_public', true)
-            .single();
 
-        if (error) throw error;
-        return { success: true, data };
-    } catch (error) {
-        console.error('Error getting user by ID:', error.message);
-        return { success: false, message: error.message };
+    if (error) throw error;            .single();
+
+    return { success: true, data };
+
+} catch (error) {
+    if (error) throw error;
+
+    console.error('Error getting user by ID:', error.message); return { success: true, data };
+
+    return { success: false, message: error.message };
+} catch (error) {
+
+} console.error('Error getting user by ID:', error.message);
+
+}; return { success: false, message: error.message };
+
     }
-};
 
-// Search users by skills
-export const searchUsersBySkills = async (skillsOffered = [], skillsWanted = [], location = '') => {
-    try {
-        let query = supabase
-            .from('users')
-            .select('*')
-            .eq('is_public', true)
-            .eq('is_banned', false);
+// Update user rating (called after completed swaps)};
 
-        if (skillsOffered.length > 0) {
-            query = query.overlaps('skills_offered', skillsOffered);
-        }
-
-        if (skillsWanted.length > 0) {
-            query = query.overlaps('skills_wanted', skillsWanted);
-        }
-
-        if (location.trim()) {
-            query = query.ilike('location', `%${location.trim()}%`);
-        }
-
-        const { data, error } = await query.order('rating', { ascending: false });
-        if (error) throw error;
-
-        return data || [];
-    } catch (error) {
-        console.error('Error searching users by skills:', error.message);
-        return [];
-    }
-};
-
-// Update user rating (called after completed swaps)
 export const updateUserRating = async (userId, newRating) => {
-    try {
-        // Get current user stats
-        const { data: user, error: getUserError } = await supabase
-            .from('users')
-            .select('rating, total_reviews')
-            .eq('id', userId)
-            .single();
 
-        if (getUserError) throw getUserError;
+    try {// Search users by skills
 
-        // Calculate new average rating
-        const currentRating = user.rating || 0;
-        const currentReviews = user.total_reviews || 0;
-        const totalRating = (currentRating * currentReviews) + newRating;
-        const newTotalReviews = currentReviews + 1;
-        const newAverageRating = totalRating / newTotalReviews;
+        // Get current user statsexport const searchUsersBySkills = async (skillsOffered = [], skillsWanted = [], location = '') => {
 
-        // Update user
-        const { data, error } = await supabase
-            .from('users')
+        const { data: user, error: getUserError } = await supabase    try {
+
+            .from('users')        let query = supabase
+
+    .select('rating, total_reviews').from('users')
+
+    .eq('id', userId).select('*')
+
+    .single();            .eq('is_public', true)
+
+        .eq('is_banned', false);
+
+if (getUserError) throw getUserError;
+
+if (skillsOffered.length > 0) {
+
+    // Calculate new average rating            query = query.overlaps('skills_offered', skillsOffered);
+
+    const currentRating = user.rating || 0;
+}
+
+const currentReviews = user.total_reviews || 0;
+
+const totalRating = (currentRating * currentReviews) + newRating; if (skillsWanted.length > 0) {
+
+    const newTotalReviews = currentReviews + 1; query = query.overlaps('skills_wanted', skillsWanted);
+
+    const newAverageRating = totalRating / newTotalReviews;
+}
+
+
+
+// Update user        if (location.trim()) {
+
+const { data, error } = await supabase            query = query.ilike('location', `%${location.trim()}%`);
+
+            .from('users')        }
+
             .update({
-                rating: Math.round(newAverageRating * 100) / 100, // Round to 2 decimal places
-                total_reviews: newTotalReviews,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', userId)
-            .select()
-            .single();
 
-        if (error) throw error;
-        return data;
-    } catch (error) {
-        console.error('Error updating user rating:', error.message);
-        throw error;
-    }
+    rating: Math.round(newAverageRating * 100) / 100, // Round to 2 decimal places        const { data, error } = await query.order('rating', { ascending: false });
+
+    total_reviews: newTotalReviews, if(error) throw error;
+
+    updated_at: new Date().toISOString()
+
+})        return data || [];
+
+            .eq('id', userId)    } catch (error) {
+
+            .select()        console.error('Error searching users by skills:', error.message);
+
+            .single(); return [];
+
+}
+
+if (error) throw error;};
+
+return data;
+
+    } catch (error) {// Update user rating (called after completed swaps)
+
+    console.error('Error updating user rating:', error.message); export const updateUserRating = async (userId, newRating) => {
+
+        throw error; try {
+
+        }        // Get current user stats
+
+}; const { data: user, error: getUserError } = await supabase
+
+        .from('users')
+
+    export default {            .select('rating, total_reviews')
+
+    getCurrentUserProfile,            .eq('id', userId)
+
+    updateUserProfile,            .single();
+
+        getAllUsers,
+
+        getUserById, if(getUserError) throw getUserError;
+
+        updateUserRating
+
+    };        // Calculate new average rating
+    const currentRating = user.rating || 0;
+    const currentReviews = user.total_reviews || 0;
+    const totalRating = (currentRating * currentReviews) + newRating;
+    const newTotalReviews = currentReviews + 1;
+    const newAverageRating = totalRating / newTotalReviews;
+
+    // Update user
+    const { data, error } = await supabase
+        .from('users')
+        .update({
+            rating: Math.round(newAverageRating * 100) / 100, // Round to 2 decimal places
+            total_reviews: newTotalReviews,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+} catch (error) {
+    console.error('Error updating user rating:', error.message);
+    throw error;
+}
 };
 
 // Admin functions

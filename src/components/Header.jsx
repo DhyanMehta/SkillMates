@@ -10,10 +10,23 @@ const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signOut } = useAuth();
+  const { user, signOut, loading: authLoading, isEmailVerificationPending } = useAuth();
   const { requests, currentUserId, isAdmin } = useAppStore();
-  
-  const isLoggedIn = Boolean(user);
+
+  // Only consider user logged in if:
+  // 1. Auth is not loading
+  // 2. User exists 
+  // 3. Email verification is not pending
+  const isLoggedIn = !authLoading && Boolean(user) && !isEmailVerificationPending;
+
+  // Debug logging for auth state
+  console.log('Header auth state:', {
+    authLoading,
+    hasUser: !!user,
+    isEmailVerificationPending,
+    isLoggedIn,
+    userEmailConfirmed: user?.email_confirmed_at
+  });
 
   const handleLogout = async () => {
     const result = await signOut();
@@ -30,9 +43,10 @@ const Header = () => {
     : 0;
 
   const navigationItems = [
+    { name: 'Home', path: '/home', icon: Home, authRequired: true },
     { name: 'Profile', path: '/profile', icon: User, authRequired: true },
     { name: 'Requests', path: '/requests', icon: Send, authRequired: true, badge: pendingCount },
-    { name: 'Skill Change', path: '/skill-change', icon: Home, authRequired: true },
+    { name: 'Skill Change', path: '/skill-change', icon: Users, authRequired: true },
     { name: 'Admin', path: '/admin', icon: Shield, adminOnly: true },
   ];
 
@@ -41,30 +55,29 @@ const Header = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
-          <Link to="/home" className="flex items-center space-x-3 group">
+          <div className="flex items-center space-x-3">
             <div className="w-10 h-10 gradient-primary rounded-xl flex items-center justify-center shadow-glow">
               <Users className="w-6 h-6 text-primary-foreground" />
             </div>
-            <span className="text-2xl font-bold transition-smooth group-hover:text-primary">
+            <span className="text-2xl font-bold text-foreground">
               SkillMates
             </span>
-          </Link>
+          </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             {navigationItems.map((item) => {
               if (item.authRequired && !isLoggedIn) return null;
               if (item.adminOnly && !isAdmin) return null;
-              
+
               return (
                 <Link
                   key={item.name}
                   to={item.path}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-smooth text-base ${
-                    isActive(item.path)
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-                  }`}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-smooth text-base ${isActive(item.path)
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                    }`}
                 >
                   <item.icon className="w-5 h-5" />
                   <span>{item.name}</span>
@@ -116,17 +129,16 @@ const Header = () => {
             {navigationItems.map((item) => {
               if (item.authRequired && !isLoggedIn) return null;
               if (item.adminOnly && !isAdmin) return null;
-              
+
               return (
                 <Link
                   key={item.name}
                   to={item.path}
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`flex items-center space-x-2 px-3 py-3 rounded-lg transition-smooth text-base ${
-                    isActive(item.path)
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-                  }`}
+                  className={`flex items-center space-x-2 px-3 py-3 rounded-lg transition-smooth text-base ${isActive(item.path)
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                    }`}
                 >
                   <item.icon className="w-5 h-5" />
                   <span>{item.name}</span>
@@ -136,7 +148,7 @@ const Header = () => {
                 </Link>
               );
             })}
-            
+
             <div className="pt-2 border-t border-border/50">
               {isLoggedIn ? (
                 <button

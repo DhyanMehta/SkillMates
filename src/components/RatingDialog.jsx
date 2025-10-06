@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Star } from 'lucide-react';
 
-const RatingDialog = ({ triggerLabel = 'Rate', onSubmit, disabled = false }) => {
+const RatingDialog = ({ triggerLabel = 'Rate', triggerVariant = 'default', onSubmit, disabled = false }) => {
   const [open, setOpen] = useState(false);
   const [rating, setRating] = useState(5);
   const [hover, setHover] = useState(null);
@@ -22,7 +22,7 @@ const RatingDialog = ({ triggerLabel = 'Rate', onSubmit, disabled = false }) => 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" disabled={disabled}>{triggerLabel}</Button>
+        <Button size="sm" variant={triggerVariant} disabled={disabled}>{triggerLabel}</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -32,7 +32,7 @@ const RatingDialog = ({ triggerLabel = 'Rate', onSubmit, disabled = false }) => 
           <div>
             <Label className="mb-2 block">Your rating</Label>
             <div className="flex items-center space-x-1">
-              {[1,2,3,4,5].map((star) => (
+              {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
                   type="button"
@@ -41,7 +41,7 @@ const RatingDialog = ({ triggerLabel = 'Rate', onSubmit, disabled = false }) => 
                   onClick={() => setRating(star)}
                   className="p-1"
                 >
-                  <Star className={`w-6 h-6 ${ (hover ?? rating) >= star ? 'fill-warning text-warning' : 'text-muted-foreground' }`} />
+                  <Star className={`w-6 h-6 ${(hover ?? rating) >= star ? 'fill-warning text-warning' : 'text-muted-foreground'}`} />
                 </button>
               ))}
             </div>

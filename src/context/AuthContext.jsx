@@ -7,77 +7,72 @@ export const AuthContextProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [session, setSession] = useState(null);
+  const [isEmailVerificationPending, setIsEmailVerificationPending] = useState(false);
 
   useEffect(() => {
+    // Set a maximum loading time of 10 seconds
+    const loadingTimeout = setTimeout(() => {
+      console.log('Auth loading timeout reached, proceeding without auth');
+      setLoading(false);
+    }, 10000);
+
     // Get initial session
-    const initializeAuth = async () => {
+    const getInitialSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user) {
-          // Get user profile from database
-          const { data: profile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-
-          setUser({
-            id: session.user.id,
-            email: session.user.email,
-            name: profile?.name || session.user.email?.split('@')[0] || 'User',
-            ...profile
-          });
-        } else {
-          setUser(null);
+          setSession(session);
+          setUser(session.user);
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
-        setUser(null);
+        console.error('Error getting initial session:', error);
       } finally {
+        clearTimeout(loadingTimeout);
         setLoading(false);
       }
     };
 
-    initializeAuth();
+    getInitialSession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        try {
-          if (session?.user) {
-            // Get user profile from database
-            const { data: profile } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
+        clearTimeout(loadingTimeout);
 
-            setUser({
-              id: session.user.id,
-              email: session.user.email,
-              name: profile?.name || session.user.email?.split('@')[0] || 'User',
-              ...profile
-            });
-          } else {
-            setUser(null);
+        console.log('Auth state change:', { event, hasUser: !!session?.user, emailConfirmed: session?.user?.email_confirmed_at });
+
+        if (session?.user) {
+          // For SIGNED_UP event, only set user state if email is confirmed
+          // For SIGNED_IN event, always set user state (user has logged in with verified credentials)
+          if (event === 'SIGNED_UP' && !session.user.email_confirmed_at) {
+            console.log('SIGNED_UP event but email not confirmed, not setting user state');
+            setLoading(false);
+            return;
           }
-        } catch (error) {
-          console.error('Auth state change error:', error);
+
+          // Set user state for confirmed users or successful sign-ins
+          setSession(session);
+          setUser(session.user);
+          setIsEmailVerificationPending(false);
+        } else {
+          setSession(null);
           setUser(null);
+          setIsEmailVerificationPending(false);
         }
+
         setLoading(false);
       }
     );
 
     return () => {
-      subscription.unsubscribe();
+      clearTimeout(loadingTimeout);
+      subscription?.unsubscribe();
     };
   }, []);
 
-  const signUp = async (email, password, userData) => {
-    console.log('SignUp called with:', { email, userData });
-
+  const signUp = async (email, password, userData = {}) => {
     try {
       setLoading(true);
       setError(null);
@@ -86,9 +81,7 @@ export const AuthContextProvider = ({ children }) => {
         email,
         password,
         options: {
-          data: {
-            name: userData?.name || email.split("@")[0],
-          }
+          data: userData
         }
       });
 
@@ -97,10 +90,31 @@ export const AuthContextProvider = ({ children }) => {
         return { success: false, message: error.message };
       }
 
-      // The user profile will be created automatically by the database trigger
-      return { success: true, data: data.user };
+      // Check if user email is confirmed
+      const emailConfirmed = data.user?.email_confirmed_at;
+      const hasSession = !!data.session;
+
+      if (!emailConfirmed && !hasSession) {
+        // Email confirmation is enabled - user needs to verify email
+        // DO NOT set user state yet - wait for email confirmation
+        setIsEmailVerificationPending(true);
+        return {
+          success: true,
+          needsEmailVerification: true,
+          message: `Registration successful! Please check ${email} for verification email.`,
+          email: email
+        };
+      } else {
+        // User is immediately confirmed (email confirmation disabled)
+        // Only set user state when they are fully authenticated
+        setUser(data.user);
+        if (data.session) {
+          setSession(data.session);
+        }
+        setIsEmailVerificationPending(false);
+        return { success: true, user: data.user, needsEmailVerification: false };
+      }
     } catch (error) {
-      console.error('Error signing up:', error);
       setError(error.message);
       return { success: false, message: error.message };
     } finally {
@@ -109,8 +123,6 @@ export const AuthContextProvider = ({ children }) => {
   };
 
   const signIn = async (email, password) => {
-    console.log('SignIn called with:', { email });
-
     try {
       setLoading(true);
       setError(null);
@@ -125,9 +137,20 @@ export const AuthContextProvider = ({ children }) => {
         return { success: false, message: error.message };
       }
 
-      return { success: true, data: data.user };
+      // Check if email is confirmed
+      if (!data.user?.email_confirmed_at) {
+        return {
+          success: false,
+          needsEmailVerification: true,
+          message: 'Please verify your email before signing in.',
+          email: email
+        };
+      }
+
+      setUser(data.user);
+      setSession(data.session);
+      return { success: true, user: data.user };
     } catch (error) {
-      console.error('Error signing in:', error);
       setError(error.message);
       return { success: false, message: error.message };
     } finally {
@@ -136,57 +159,24 @@ export const AuthContextProvider = ({ children }) => {
   };
 
   const signOut = async () => {
-    console.log('SignOut called');
-
     try {
+      setLoading(true);
+      setError(null);
+
       const { error } = await supabase.auth.signOut();
       if (error) {
-        console.error('Error signing out:', error);
+        setError(error.message);
         return { success: false, message: error.message };
       }
+
       setUser(null);
+      setSession(null);
       return { success: true };
     } catch (error) {
-      console.error('Error signing out:', error);
+      setError(error.message);
       return { success: false, message: error.message };
-    }
-  };
-
-  const resetPassword = async (email) => {
-    console.log('ResetPassword called with:', { email });
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`
-      });
-
-      if (error) {
-        return { success: false, message: error.message };
-      }
-
-      return { success: true, message: 'Password reset email sent!' };
-    } catch (error) {
-      console.error('Error sending reset email:', error);
-      return { success: false, message: error.message };
-    }
-  };
-
-  const updatePassword = async (newPassword) => {
-    console.log('UpdatePassword called');
-
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-
-      if (error) {
-        return { success: false, message: error.message };
-      }
-
-      return { success: true, message: 'Password updated successfully!' };
-    } catch (error) {
-      console.error('Error updating password:', error);
-      return { success: false, message: error.message };
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -195,22 +185,53 @@ export const AuthContextProvider = ({ children }) => {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase.auth.verifyOtp({
+      // Add timeout to prevent hanging
+      const otpPromise = supabase.auth.verifyOtp({
         email,
         token,
         type: 'signup'
       });
 
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('OTP verification timeout')), 10000)
+      );
+
+      const { data, error } = await Promise.race([otpPromise, timeoutPromise]);
+
       if (error) {
-        setError(error.message);
-        return { success: false, message: error.message };
+        let userMessage = error.message;
+
+        // More specific error messages
+        if (error.message?.includes('expired') || error.message?.includes('Token has expired')) {
+          userMessage = 'OTP has expired. Please request a new one.';
+        } else if (error.message?.includes('invalid') || error.message?.includes('Invalid token')) {
+          userMessage = 'Invalid OTP. Please check your code and try again.';
+        } else if (error.message?.includes('too many')) {
+          userMessage = 'Too many attempts. Please wait before trying again.';
+        } else if (error.message?.includes('timeout')) {
+          userMessage = 'Verification timed out. Please try again.';
+        }
+
+        setError(userMessage);
+        return { success: false, message: userMessage };
       }
 
-      return { success: true, data: data.user };
+      // Check if user exists and is now confirmed
+      if (data?.user) {
+        // Set user and session regardless of session presence
+        setUser(data.user);
+        if (data.session) {
+          setSession(data.session);
+        }
+        setIsEmailVerificationPending(false);
+
+        return { success: true, data: data.user };
+      } else {
+        return { success: false, message: 'Verification completed but no user data received' };
+      }
     } catch (error) {
-      console.error('Error verifying OTP:', error);
-      setError(error.message);
-      return { success: false, message: error.message };
+      setError('Network error occurred');
+      return { success: false, message: 'Network error. Please check your connection and try again.' };
     } finally {
       setLoading(false);
     }
@@ -233,7 +254,6 @@ export const AuthContextProvider = ({ children }) => {
 
       return { success: true, message: 'OTP resent successfully!' };
     } catch (error) {
-      console.error('Error resending OTP:', error);
       setError(error.message);
       return { success: false, message: error.message };
     } finally {
@@ -241,17 +261,80 @@ export const AuthContextProvider = ({ children }) => {
     }
   };
 
+  const updateProfile = async (updates) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error } = await supabase.auth.updateUser({
+        data: updates
+      });
+
+      if (error) {
+        setError(error.message);
+        return { success: false, message: error.message };
+      }
+
+      setUser(data.user);
+      return { success: true, user: data.user };
+    } catch (error) {
+      setError(error.message);
+      return { success: false, message: error.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkOnboardingStatus = async (userId) => {
+    try {
+      // First check if onboarding was already completed in auth metadata
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser?.user_metadata?.onboarding_completed === true) {
+        return { needsOnboarding: false, userData: null };
+      }
+
+      // Then check database record as backup
+      const { data, error } = await supabase
+        .from('users')
+        .select('skills_offered, name')
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+        throw error;
+      }
+
+      // User needs onboarding if:
+      // 1. No database record exists, OR
+      // 2. No skills_offered array, OR  
+      // 3. skills_offered array is empty, OR
+      // 4. No name
+      const needsOnboarding = !data ||
+        !data.skills_offered ||
+        data.skills_offered.length === 0 ||
+        !data.name;
+
+      return { needsOnboarding, userData: data };
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      return { needsOnboarding: true, userData: null };
+    }
+  };
+
   const value = {
     user,
+    session,
+    loading,
+    error,
+    isEmailVerificationPending,
     signUp,
     signIn,
     signOut,
-    resetPassword,
-    updatePassword,
     verifyOTP,
     resendOTP,
-    loading,
-    error
+    updateProfile,
+    checkOnboardingStatus,
+    setError
   };
 
   return (
@@ -268,5 +351,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-export default AuthContext;

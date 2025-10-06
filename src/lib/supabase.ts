@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Direct Supabase configuration - no checks needed
+// Direct Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!
 
@@ -82,7 +82,7 @@ export interface Database {
                     offered_skill: string
                     requested_skill: string
                     message?: string
-                    status: 'pending' | 'accepted' | 'rejected' | 'cancelled'
+                    status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed'
                     rating_from_sender?: number
                     rating_from_recipient?: number
                     feedback_from_sender?: string
@@ -97,7 +97,7 @@ export interface Database {
                     offered_skill: string
                     requested_skill: string
                     message?: string
-                    status?: 'pending' | 'accepted' | 'rejected' | 'cancelled'
+                    status?: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed'
                     rating_from_sender?: number
                     rating_from_recipient?: number
                     feedback_from_sender?: string
@@ -112,7 +112,7 @@ export interface Database {
                     offered_skill?: string
                     requested_skill?: string
                     message?: string
-                    status?: 'pending' | 'accepted' | 'rejected' | 'cancelled'
+                    status?: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed'
                     rating_from_sender?: number
                     rating_from_recipient?: number
                     feedback_from_sender?: string

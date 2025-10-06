@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import SkillTag from '../components/SkillTag';
-import { getUserById, getCurrentUserProfile } from '../services/userService';
-import { requestService } from '../services/requestService';
+import userService from '../services/supabaseUserService';
+import { requestService } from '../services/supabaseRequestService';
 import { useAuth } from '../context/AuthContext';
 
 const SendRequest = ({ isLoggedIn }) => {
@@ -38,15 +38,42 @@ const SendRequest = ({ isLoggedIn }) => {
         setLoading(true);
 
         // Load current user profile
-        const currentProfile = await getCurrentUserProfile();
-        if (!currentProfile) {
+        const currentProfileResult = await userService.getUserProfile(user.id);
+        if (!currentProfileResult.success) {
+          console.error('Current user profile not found:', currentProfileResult.message);
+          toast({
+            title: "Profile Setup Required",
+            description: "Please complete your profile setup first.",
+            variant: "destructive",
+          });
           navigate('/profile');
           return;
         }
-        setCurrentUser(currentProfile);
+        setCurrentUser(currentProfileResult.data);
+
+        console.log('Current user profile loaded:', currentProfileResult.data);
+        console.log('Skills offered:', currentProfileResult.data.skillsOffered);
+        console.log('Skills offered type:', typeof currentProfileResult.data.skillsOffered);
+        console.log('Skills offered length:', currentProfileResult.data.skillsOffered?.length);
+
+        // Check if current user has skills to offer
+        if (!currentProfileResult.data.skillsOffered || currentProfileResult.data.skillsOffered.length === 0) {
+          console.error('Skills validation failed:', {
+            hasSkillsOffered: !!currentProfileResult.data.skillsOffered,
+            skillsArray: currentProfileResult.data.skillsOffered,
+            arrayLength: currentProfileResult.data.skillsOffered?.length
+          });
+          toast({
+            title: "Profile Incomplete",
+            description: "Please add skills to your profile before sending requests.",
+            variant: "destructive",
+          });
+          navigate('/profile');
+          return;
+        }
 
         // Load target user
-        const targetUserResult = await getUserById(userId);
+        const targetUserResult = await userService.getUserProfile(userId);
         if (!targetUserResult.success || !targetUserResult.data) {
           toast({
             title: 'User not found',
@@ -57,7 +84,7 @@ const SendRequest = ({ isLoggedIn }) => {
           return;
         }
 
-        if (currentProfile.id === targetUserResult.data.id) {
+        if (currentProfileResult.data.id === targetUserResult.data.id) {
           toast({
             title: 'Invalid request',
             description: 'You cannot send a request to yourself.',
@@ -99,12 +126,23 @@ const SendRequest = ({ isLoggedIn }) => {
     setIsLoading(true);
 
     try {
-      const result = await requestService.createRequest({
+      console.log('Sending request with data:', {
+        fromUserId: user.id,
         toUserId: targetUser.id,
         offeredSkill: formData.offeredSkill,
         requestedSkill: formData.requestedSkill,
         message: formData.message,
       });
+
+      const result = await requestService.createRequest({
+        fromUserId: user.id,
+        toUserId: targetUser.id,
+        offeredSkill: formData.offeredSkill,
+        requestedSkill: formData.requestedSkill,
+        message: formData.message,
+      });
+
+      console.log('Request result:', result);
 
       if (result.success) {
         toast({
@@ -113,13 +151,14 @@ const SendRequest = ({ isLoggedIn }) => {
         });
         navigate('/requests');
       } else {
-        throw new Error(result.message);
+        console.error('Request failed:', result.message);
+        throw new Error(result.message || 'Failed to send request');
       }
     } catch (error) {
       console.error('Error sending request:', error);
       toast({
         title: "Error",
-        description: "Failed to send request. Please try again.",
+        description: error.message || "Failed to send request. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -241,7 +280,7 @@ const SendRequest = ({ isLoggedIn }) => {
                   <div>
                     <h4 className="text-sm font-medium text-foreground mb-2">Skills They Offer</h4>
                     <div className="flex flex-wrap gap-2">
-                      {(targetUser.skills_offered || []).map((skill, index) => (
+                      {(targetUser.skillsOffered || []).map((skill, index) => (
                         <SkillTag key={index} skill={skill} variant="offered" />
                       ))}
                     </div>
@@ -250,7 +289,7 @@ const SendRequest = ({ isLoggedIn }) => {
                   <div>
                     <h4 className="text-sm font-medium text-foreground mb-2">Skills They Want</h4>
                     <div className="flex flex-wrap gap-2">
-                      {(targetUser.skills_wanted || []).map((skill, index) => (
+                      {(targetUser.skillsWanted || []).map((skill, index) => (
                         <SkillTag key={index} skill={skill} variant="wanted" />
                       ))}
                     </div>
@@ -277,7 +316,7 @@ const SendRequest = ({ isLoggedIn }) => {
                         <SelectValue placeholder="Select a skill you can teach" />
                       </SelectTrigger>
                       <SelectContent>
-                        {(currentUser.skills_offered || []).map((skill) => (
+                        {(currentUser.skillsOffered || []).map((skill) => (
                           <SelectItem key={skill} value={skill}>
                             {skill}
                           </SelectItem>
@@ -301,7 +340,7 @@ const SendRequest = ({ isLoggedIn }) => {
                         <SelectValue placeholder="Select a skill you want to learn" />
                       </SelectTrigger>
                       <SelectContent>
-                        {(targetUser.skills_offered || []).map((skill) => (
+                        {(targetUser.skillsOffered || []).map((skill) => (
                           <SelectItem key={skill} value={skill}>
                             {skill}
                           </SelectItem>

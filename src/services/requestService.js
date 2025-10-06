@@ -1,94 +1,173 @@
-// Complete Supabase Request Service
-// Replaces all localStorage request management with Supabase database operations
+// Legacy request service// Complete Supabase Request Service
 
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';// Replaces all localStorage request management with Supabase database operations
 
-// Get all requests with user details
-export const getAllRequests = async () => {
+
+
+export const createRequest = async (requestData) => {
+    import { supabase } from '../lib/supabase';
+
     try {
-        const { data, error } = await supabase
-            .from('swap_requests')
-            .select(`
-        *,
-        from_user:users!swap_requests_from_user_id_fkey(id, name, email, avatar, rating),
-        to_user:users!swap_requests_to_user_id_fkey(id, name, email, avatar, rating)
-      `)
-            .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        return { success: true, data: data || [] };
-    } catch (error) {
+        const { data, error } = await supabase// Get all requests with user details
+
+            .from('swap_requests')export const getAllRequests = async () => {
+
+            .insert([requestData])    try {
+
+            .select()        const { data, error } = await supabase
+
+        .single();            .from('swap_requests')
+
+            .select(`
+
+        if (error) throw error;        *,
+
+        return { success: true, data };        from_user:users!swap_requests_from_user_id_fkey(id, name, email, avatar, rating),
+
+    } catch (error) {        to_user:users!swap_requests_to_user_id_fkey(id, name, email, avatar, rating)
+
+        console.error('Error creating request:', error.message);      `)
+
+    return { success: false, message: error.message };            .order('created_at', { ascending: false });
+
+}
+
+}; if (error) throw error;
+
+return { success: true, data: data || [] };
+
+export const getRequestsForUser = async (userId) => { } catch (error) {
+
+    try {
         console.error('Error getting all requests:', error.message);
-        return { success: false, message: error.message };
+
+        const { data, error } = await supabase        return { success: false, message: error.message };
+
+            .from('swap_requests')
     }
+
+            .select('*')
 };
 
-// Get sent requests for a user
+            .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+
+    .order('created_at', { ascending: false });// Get sent requests for a user
+
 export const getSentRequests = async (userId) => {
-    try {
-        const { data, error } = await supabase
-            .from('swap_requests')
-            .select(`
-        *,
-        from_user:users!swap_requests_from_user_id_fkey(id, name, email, avatar, rating),
-        to_user:users!swap_requests_to_user_id_fkey(id, name, email, avatar, rating)
+
+    if (error) throw error; try {
+
+        return { success: true, data: data || [] }; const { data, error } = await supabase
+
+    } catch (error) {            .from('swap_requests')
+
+        console.error('Error getting requests for user:', error.message);            .select(`
+
+        return { success: false, message: error.message };        *,
+
+    }        from_user:users!swap_requests_from_user_id_fkey(id, name, email, avatar, rating),
+
+};        to_user:users!swap_requests_to_user_id_fkey(id, name, email, avatar, rating)
+
       `)
-            .eq('from_user_id', userId)
-            .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        export const updateRequestStatus = async (requestId, status) => {            .eq('from_user_id', userId)
 
-        // Transform data to match expected format
-        const transformedData = data?.map(request => ({
-            ...request,
-            fromUserId: request.from_user_id,
-            toUserId: request.to_user_id,
-            offeredSkill: request.offered_skill,
-            requestedSkill: request.requested_skill,
-            createdAt: request.created_at,
-            fromUser: request.from_user,
-            toUser: request.to_user
-        })) || [];
+            try {            .order('created_at', { ascending: false });
 
-        return { success: true, data: transformedData };
+                const { data, error } = await supabase
+
+                    .from('swap_requests')        if (error) throw error;
+
+            .update({ status, updated_at: new Date().toISOString() })
+
+    .eq('id', requestId)        // Transform data to match expected format
+
+    .select()        const transformedData = data?.map(request => ({
+
+            .single(); ...request,
+
+        fromUserId: request.from_user_id,
+
+        if(error) throw error; toUserId: request.to_user_id,
+
+        return { success: true, data }; offeredSkill: request.offered_skill,
+
     } catch (error) {
-        console.error('Error getting sent requests:', error.message);
-        return { success: false, message: error.message };
-    }
-};
+        requestedSkill: request.requested_skill,
 
-// Get received requests for a user
-export const getReceivedRequests = async (userId) => {
+            console.error('Error updating request status:', error.message); createdAt: request.created_at,
+
+        return { success: false, message: error.message }; fromUser: request.from_user,
+
+    } toUser: request.to_user
+
+};        })) || [];
+
+
+
+export const deleteRequest = async (requestId) => {
+    return { success: true, data: transformedData };
+
+    try { } catch (error) {
+
+        const { error } = await supabase        console.error('Error getting sent requests:', error.message);
+
+            .from('swap_requests')        return { success: false, message: error.message };
+
+            .delete ()    }
+
+            .eq('id', requestId);};
+
+
+
+if (error) throw error;// Get received requests for a user
+
+return { success: true }; export const getReceivedRequests = async (userId) => {
+
+} catch (error) {
     try {
-        const { data, error } = await supabase
-            .from('swap_requests')
-            .select(`
-        *,
+
+        console.error('Error deleting request:', error.message); const { data, error } = await supabase
+
+        return { success: false, message: error.message };            .from('swap_requests')
+
+    }            .select(`
+
+};        *,
+
         from_user:users!swap_requests_from_user_id_fkey(id, name, email, avatar, rating),
-        to_user:users!swap_requests_to_user_id_fkey(id, name, email, avatar, rating)
-      `)
-            .eq('to_user_id', userId)
-            .order('created_at', { ascending: false });
 
-        if (error) throw error;
+export default {        to_user:users!swap_requests_to_user_id_fkey(id, name, email, avatar, rating)
 
-        // Transform data to match expected format
-        const transformedData = data?.map(request => ({
-            ...request,
-            fromUserId: request.from_user_id,
-            toUserId: request.to_user_id,
-            offeredSkill: request.offered_skill,
-            requestedSkill: request.requested_skill,
-            createdAt: request.created_at,
-            fromUser: request.from_user,
-            toUser: request.to_user
-        })) || [];
+    createRequest,      `)
 
-        return { success: true, data: transformedData };
+    getRequestsForUser,            .eq('to_user_id', userId)
+
+    updateRequestStatus,            .order('created_at', { ascending: false });
+
+    deleteRequest
+
+}; if (error) throw error;
+
+// Transform data to match expected format
+const transformedData = data?.map(request => ({
+    ...request,
+    fromUserId: request.from_user_id,
+    toUserId: request.to_user_id,
+    offeredSkill: request.offered_skill,
+    requestedSkill: request.requested_skill,
+    createdAt: request.created_at,
+    fromUser: request.from_user,
+    toUser: request.to_user
+})) || [];
+
+return { success: true, data: transformedData };
     } catch (error) {
-        console.error('Error getting received requests:', error.message);
-        return { success: false, message: error.message };
-    }
+    console.error('Error getting received requests:', error.message);
+    return { success: false, message: error.message };
+}
 };
 
 // Create a new swap request

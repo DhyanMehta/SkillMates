@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Send, Clock, CheckCircle, XCircle, User, ArrowLeft } from 'lucide-react';
+import { Search, Filter, Send, Clock, CheckCircle, XCircle, User, ArrowLeft, MessageCircle, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,8 +8,9 @@ import { useToast } from '@/hooks/use-toast';
 import SkillTag from '../components/SkillTag';
 import Pagination from '../components/Pagination';
 import RatingDialog from '@/components/RatingDialog';
-import { requestService } from '../services/requestService';
-import { getCurrentUserProfile } from '../services/userService';
+import requestService from '../services/supabaseRequestService';
+import userService from '../services/supabaseUserService';
+import chatService from '../services/supabaseChatService';
 import { useAuth } from '../context/AuthContext';
 
 const Requests = ({ isLoggedIn }) => {
@@ -37,8 +38,10 @@ const Requests = ({ isLoggedIn }) => {
         setLoading(true);
 
         // Get current user profile
-        const profile = await getCurrentUserProfile();
-        setCurrentUser(profile);
+        const profileResult = await userService.getUserProfile(user.id);
+        if (profileResult.success) {
+          setCurrentUser(profileResult.data);
+        }
 
         // Load both sent and received requests
         const [sentResult, receivedResult] = await Promise.all([
@@ -60,7 +63,23 @@ const Requests = ({ isLoggedIn }) => {
           });
         }
 
-        setRequests(allRequests);
+        // Fetch user details for each request
+        const requestsWithUsers = await Promise.all(
+          allRequests.map(async (request) => {
+            const [fromUserResult, toUserResult] = await Promise.all([
+              userService.getPublicUserProfile(request.fromUserId),
+              userService.getPublicUserProfile(request.toUserId)
+            ]);
+
+            return {
+              ...request,
+              fromUser: fromUserResult.success ? fromUserResult.data : { name: 'Unknown User', avatar: null },
+              toUser: toUserResult.success ? toUserResult.data : { name: 'Unknown User', avatar: null }
+            };
+          })
+        );
+
+        setRequests(requestsWithUsers);
       } catch (error) {
         console.error('Error loading requests:', error);
         toast({
@@ -102,25 +121,113 @@ const Requests = ({ isLoggedIn }) => {
 
   const handleAcceptRequest = async (requestId) => {
     try {
-      const result = await requestService.updateRequestStatus(requestId, 'accepted');
+      console.log('Starting request acceptance for requestId:', requestId);
+      console.log('Current user:', user);
+
+      // First, update the request status
+      const result = await requestService.updateRequestStatus(requestId, 'accepted', user.id);
+      console.log('Update request status result:', result);
+
       if (result.success) {
         // Update local state
         setRequests(prev => prev.map(req =>
           req.id === requestId ? { ...req, status: 'accepted' } : req
         ));
-        toast({ title: 'Request accepted!', description: "You can now start collaborating." });
-        // Navigate to skill change page for this request
-        setTimeout(() => {
-          navigate(`/skill-change/${requestId}`);
-        }, 0);
+
+        // Find the request to get participant details
+        const request = requests.find(req => req.id === requestId);
+        console.log('Found request in local state:', request);
+
+        if (!request) {
+          throw new Error('Request not found in local state');
+        }
+
+        // Now try to create chat functionality
+        try {
+          console.log('Chat service available:', !!chatService);
+          console.log('getOrCreateChatThread function available:', !!chatService.getOrCreateChatThread);
+          console.log('Creating chat thread...');
+
+          const participantIds = [request.fromUserId, request.toUserId];
+          console.log('Participants detail:', {
+            fromUserId: request.fromUserId,
+            toUserId: request.toUserId,
+            participantIds: participantIds,
+            participantIdsValid: participantIds.every(id => id && typeof id === 'string'),
+            currentUserId: user.id
+          });
+
+          const chatResult = await chatService.getOrCreateChatThread(requestId);
+          console.log('Chat thread creation result:', chatResult);
+
+          if (chatResult.success && chatResult.data) {
+            // Send a welcome message
+            const skillsWantedStr = request.skillsWanted && request.skillsWanted.length > 0
+              ? request.skillsWanted.join(', ')
+              : 'new skills';
+            const skillsOfferedStr = request.skillsOffered && request.skillsOffered.length > 0
+              ? request.skillsOffered.join(', ')
+              : 'my skills';
+
+            const welcomeMessages = [
+              `🎉 Great! Let's start our skill exchange! I'm excited to learn ${skillsWantedStr} from you.`,
+              `👋 Hey! Looking forward to our skill swap! Can't wait to teach you ${skillsOfferedStr}.`,
+              `✨ Awesome! Our skill exchange is now active. When would be a good time to start our learning session?`,
+              `🚀 Perfect! Let's make this skill exchange amazing! I'm ready to learn and teach.`
+            ];
+
+            const randomMessage = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+            console.log('Sending welcome message:', randomMessage);
+
+            // Send the welcome message
+            const messageResult = await chatService.sendMessage(chatResult.data.id, user.id, randomMessage);
+            console.log('Message send result:', messageResult);
+
+            if (messageResult.success) {
+              toast({
+                title: 'Request accepted!',
+                description: "Chat started! Redirecting to conversation..."
+              });
+
+              // Navigate to skill exchange chat
+              setTimeout(() => {
+                console.log('Navigating to skill exchange chat...');
+                navigate(`/skill-change/${requestId}`);
+              }, 1500);
+            } else {
+              console.error('Failed to send welcome message:', messageResult);
+              // Still show success for request acceptance, but note chat issue
+              toast({
+                title: 'Request accepted!',
+                description: "Request accepted but couldn't start chat. You can access it from the Chat button."
+              });
+            }
+          } else {
+            console.error('Chat thread creation failed:', chatResult);
+            // Still show success for request acceptance
+            toast({
+              title: 'Request accepted!',
+              description: "Request accepted but couldn't create chat thread. Try using the Chat button."
+            });
+          }
+        } catch (chatError) {
+          console.error('Error in chat creation process:', chatError);
+          // Request was accepted successfully, but chat failed
+          toast({
+            title: 'Request accepted!',
+            description: "Request accepted successfully. Use the Chat button to start conversation."
+          });
+        }
+
       } else {
-        throw new Error(result.message);
+        console.error('Request status update failed:', result);
+        throw new Error(result.message || 'Failed to update request status');
       }
     } catch (error) {
       console.error('Error accepting request:', error);
       toast({
         title: 'Error',
-        description: 'Failed to accept request. Please try again.',
+        description: `Failed to accept request: ${error.message}`,
         variant: 'destructive'
       });
     }
@@ -143,6 +250,54 @@ const Requests = ({ isLoggedIn }) => {
       toast({
         title: 'Error',
         description: 'Failed to reject request. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const rateRequest = async (requestId, stars, feedback) => {
+    try {
+      // Find the request to determine if user is sender or recipient
+      const request = requests.find(req => req.id === requestId);
+      if (!request) {
+        throw new Error('Request not found');
+      }
+
+      const fromSender = request.fromUserId === user.id;
+      const result = await requestService.addRating(requestId, stars, feedback || '', fromSender, user.id);
+
+      if (result.success) {
+        // Update local state
+        setRequests(prev => prev.map(req =>
+          req.id === requestId ? result.data : req
+        ));
+
+        // Get the other user's updated information for the toast
+        const otherUser = fromSender ? result.data.toUser : result.data.fromUser;
+        const otherUserName = otherUser?.name || 'User';
+        const newRating = otherUser?.rating ? otherUser.rating.toFixed(1) : 'N/A';
+
+        toast({
+          title: 'Rating submitted!',
+          description: `Thank you for rating ${otherUserName}! Their new rating is ⭐ ${newRating}`
+        });
+
+        // Refresh homepage data to show updated ratings
+        console.log('🔄 Refreshing homepage user data after rating...');
+        if (window.refreshHomepageUsers) {
+          // Add a small delay to ensure database updates are complete
+          setTimeout(() => {
+            window.refreshHomepageUsers();
+          }, 1000);
+        }
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('Error rating request:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to submit rating. Please try again.',
         variant: 'destructive'
       });
     }
@@ -174,6 +329,8 @@ const Requests = ({ isLoggedIn }) => {
         return <Clock className="w-4 h-4" />;
       case 'accepted':
         return <CheckCircle className="w-4 h-4" />;
+      case 'completed':
+        return <CheckCircle className="w-4 h-4" />;
       case 'rejected':
         return <XCircle className="w-4 h-4" />;
       default:
@@ -187,6 +344,8 @@ const Requests = ({ isLoggedIn }) => {
         return 'Pending';
       case 'accepted':
         return 'Accepted';
+      case 'completed':
+        return 'Completed';
       case 'rejected':
         return 'Rejected';
       default:
@@ -310,16 +469,28 @@ const Requests = ({ isLoggedIn }) => {
                                   {otherUser?.name}
                                 </h3>
                                 <span className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${request.status === 'pending' ? 'status-pending' :
-                                    request.status === 'accepted' ? 'status-accepted' :
+                                  request.status === 'accepted' ? 'status-accepted' :
+                                    request.status === 'completed' ? 'status-completed' :
                                       'status-rejected'
                                   }`}>
                                   {getStatusIcon(request.status)}
                                   <span>{getStatusText(request.status)}</span>
                                 </span>
                               </div>
-                              <p className="text-sm text-muted-foreground">
-                                {isIncoming ? 'Wants to learn from you' : 'You requested to learn from them'}
-                              </p>
+                              <div className="flex items-center space-x-2">
+                                <p className="text-sm text-muted-foreground">
+                                  {isIncoming ? 'Wants to learn from you' : 'You requested to learn from them'}
+                                </p>
+                                {otherUser?.rating && (
+                                  <div className="flex items-center space-x-1 text-xs text-amber-600 dark:text-amber-400">
+                                    <Star className="w-3 h-3 fill-current" />
+                                    <span>{otherUser.rating.toFixed(1)}</span>
+                                    {otherUser.total_exchanges && (
+                                      <span className="text-muted-foreground">({otherUser.total_exchanges} exchanges)</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -385,24 +556,34 @@ const Requests = ({ isLoggedIn }) => {
                               </div>
                             )}
 
-                            {/* Accepted: allow rating by both sides */}
+                            {/* Accepted: show chat button */}
                             {request.status === 'accepted' && (
-                              <div>
-                                {(() => {
-                                  const chat = getChatByRequestId(request.id);
-                                  const bothCompleted = chat?.isCompleted;
-                                  if (!bothCompleted) return null;
-                                  return (
-                                    <RatingDialog
-                                      triggerLabel={isIncoming ? (request.ratingFromRecipient ? 'Rated' : 'Rate') : (request.ratingFromSender ? 'Rated' : 'Rate')}
-                                      disabled={isIncoming ? !!request.ratingFromRecipient : !!request.ratingFromSender}
-                                      onSubmit={(stars, feedback) => {
-                                        rateRequest(request.id, stars, feedback);
-                                        toast({ title: 'Thanks for your rating!', description: 'Your feedback helps the community.' });
-                                      }}
-                                    />
-                                  );
-                                })()}
+                              <div className="flex space-x-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => navigate(`/skill-change/${request.id}`)}
+                                  className="gradient-primary text-primary-foreground"
+                                >
+                                  <MessageCircle className="w-4 h-4 mr-1" />
+                                  Chat
+                                </Button>
+                              </div>
+                            )}
+
+                            {/* Completed: show rating button */}
+                            {request.status === 'completed' && (
+                              <div className="flex space-x-2">
+                                <div className="text-sm text-green-600 dark:text-green-400 font-medium">
+                                  ✅ Exchange Completed
+                                </div>
+                                <RatingDialog
+                                  triggerLabel={isIncoming ? (request.ratingFromRecipient ? '⭐ Rated' : '⭐ Rate Partner') : (request.ratingFromSender ? '⭐ Rated' : '⭐ Rate Partner')}
+                                  triggerVariant={isIncoming ? (request.ratingFromRecipient ? 'outline' : 'default') : (request.ratingFromSender ? 'outline' : 'default')}
+                                  disabled={isIncoming ? !!request.ratingFromRecipient : !!request.ratingFromSender}
+                                  onSubmit={(stars, feedback) => {
+                                    rateRequest(request.id, stars, feedback);
+                                  }}
+                                />
                               </div>
                             )}
                           </div>

@@ -1,28 +1,10 @@
-// Local storage backed persistence for users, swap requests, and announcements
-// Starts empty and grows based on user actions
-
-export type SwapStatus = "pending" | "accepted" | "rejected" | "cancelled";
-
-export interface SwapRequest {
-  id: number;
-  fromUserId: number;
-  toUserId: number;
-  offeredSkill: string;
-  requestedSkill: string;
-  message?: string;
-  status: SwapStatus;
-  createdAt: string;
-  ratingFromSender?: number; // rating given by the sender to the recipient
-  ratingFromRecipient?: number; // rating given by the recipient to the sender
-  feedbackFromSender?: string;
-  feedbackFromRecipient?: string;
-}
+// Local database service that provides types and utilities for the app
 
 export interface AppUser {
   id: number;
   name: string;
   email: string;
-  location?: string;
+  location: string;
   avatar: string;
   skillsOffered: string[];
   skillsWanted: string[];
@@ -30,99 +12,115 @@ export interface AppUser {
   rating: number;
   reviews: number;
   isPublic: boolean;
-  bio?: string;
-  isBanned?: boolean;
-  isProfileApproved?: boolean; // for admin moderation
+  bio: string;
 }
 
-const USERS_KEY = "ssc_users";
-const REQUESTS_KEY = "ssc_swap_requests";
-const ANNOUNCEMENTS_KEY = "ssc_announcements";
-const CHATS_KEY = "ssc_chats";
-
-export type Announcement = {
-  id: string;
+export interface SwapRequest {
+  id: number;
+  fromUserId: number;
+  toUserId: number;
+  skillWanted: string;
+  skillOffered: string;
   message: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'completed' | 'cancelled';
   createdAt: string;
-};
+  updatedAt: string;
+}
 
-export type ChatMessage = {
-  id: string;
-  threadId: string;
-  senderUserId: number;
-  content: string;
+export interface Announcement {
+  id: number;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success';
   createdAt: string;
-};
+}
 
-export type ChatThread = {
-  id: string;
+export interface ChatThread {
+  id: number;
   requestId: number;
-  participantUserIds: [number, number];
-  messages: ChatMessage[];
-  isCompleted: boolean;
-  completedUserIds?: number[]; // which users have marked complete
+  participants: number[];
+  lastMessage: string;
+  lastMessageAt: string;
+  unreadCount: number;
+}
+
+// Local storage keys
+const STORAGE_KEYS = {
+  users: 'skillmates_users',
+  requests: 'skillmates_requests', 
+  announcements: 'skillmates_announcements',
+  chats: 'skillmates_chats'
 };
 
-function readJson<T>(key: string): T | null {
+// Utility functions for localStorage management
+export const loadUsers = (): AppUser[] => {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
+    const users = localStorage.getItem(STORAGE_KEYS.users);
+    return users ? JSON.parse(users) : [];
+  } catch (error) {
+    console.error('Error loading users from localStorage:', error);
+    return [];
   }
-}
+};
 
-function writeJson<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value));
-}
+export const saveUsers = (users: AppUser[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(users));
+  } catch (error) {
+    console.error('Error saving users to localStorage:', error);
+  }
+};
 
-// Users
-export function loadUsers(): AppUser[] {
-  const existing = readJson<AppUser[]>(USERS_KEY);
-  if (existing && Array.isArray(existing)) return existing;
-  const initialized: AppUser[] = [];
-  writeJson(USERS_KEY, initialized);
-  return initialized;
-}
+export const loadRequests = (): SwapRequest[] => {
+  try {
+    const requests = localStorage.getItem(STORAGE_KEYS.requests);
+    return requests ? JSON.parse(requests) : [];
+  } catch (error) {
+    console.error('Error loading requests from localStorage:', error);
+    return [];
+  }
+};
 
-export function saveUsers(users: AppUser[]): void {
-  writeJson(USERS_KEY, users);
-}
+export const saveRequests = (requests: SwapRequest[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.requests, JSON.stringify(requests));
+  } catch (error) {
+    console.error('Error saving requests to localStorage:', error);
+  }
+};
 
-// Requests
-export function loadRequests(): SwapRequest[] {
-  const existing = readJson<SwapRequest[]>(REQUESTS_KEY);
-  if (existing && Array.isArray(existing)) return existing;
-  const initialized: SwapRequest[] = [];
-  writeJson(REQUESTS_KEY, initialized);
-  return initialized;
-}
+export const loadAnnouncements = (): Announcement[] => {
+  try {
+    const announcements = localStorage.getItem(STORAGE_KEYS.announcements);
+    return announcements ? JSON.parse(announcements) : [];
+  } catch (error) {
+    console.error('Error loading announcements from localStorage:', error);
+    return [];
+  }
+};
 
-export function saveRequests(requests: SwapRequest[]): void {
-  writeJson(REQUESTS_KEY, requests);
-}
+export const saveAnnouncements = (announcements: Announcement[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.announcements, JSON.stringify(announcements));
+  } catch (error) {
+    console.error('Error saving announcements to localStorage:', error);
+  }
+};
 
-// Announcements
-export function loadAnnouncements(): Announcement[] {
-  return readJson<Announcement[]>(ANNOUNCEMENTS_KEY) ?? [];
-}
+export const loadChats = (): ChatThread[] => {
+  try {
+    const chats = localStorage.getItem(STORAGE_KEYS.chats);
+    return chats ? JSON.parse(chats) : [];
+  } catch (error) {
+    console.error('Error loading chats from localStorage:', error);
+    return [];
+  }
+};
 
-export function saveAnnouncements(list: Announcement[]): void {
-  writeJson(ANNOUNCEMENTS_KEY, list);
-}
-
-// Chats
-export function loadChats(): ChatThread[] {
-  const existing = readJson<ChatThread[]>(CHATS_KEY);
-  if (existing && Array.isArray(existing)) return existing;
-  const initialized: ChatThread[] = [];
-  writeJson(CHATS_KEY, initialized);
-  return initialized;
-}
-
-export function saveChats(chats: ChatThread[]): void {
-  writeJson(CHATS_KEY, chats);
-}
-
-
+export const saveChats = (chats: ChatThread[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.chats, JSON.stringify(chats));
+  } catch (error) {
+    console.error('Error saving chats to localStorage:', error);
+  }
+};

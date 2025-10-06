@@ -101,6 +101,57 @@ export const chatService = {
     // Create a new chat thread for a swap request
     createChatThread: async (requestId: number, participantUserIds: string[]) => {
         try {
+            console.log('=== CREATE CHAT THREAD DEBUG ===');
+            console.log('createChatThread called with:', { requestId, participantUserIds });
+
+            // Check authentication first
+            const { data: authUser, error: authError } = await supabase.auth.getUser();
+            console.log('Current authenticated user:', { authUser: authUser?.user?.id, authError });
+
+            if (authError || !authUser?.user) {
+                console.error('Authentication issue:', authError);
+                return { success: false, message: 'Authentication required for chat functionality' };
+            }
+
+            // Check if request exists first
+            console.log('Checking if request exists...');
+            const { data: requestCheck, error: requestError } = await supabase
+                .from('swap_requests')
+                .select('id, status, from_user_id, to_user_id')
+                .eq('id', requestId)
+                .single();
+
+            console.log('Request existence check:', { requestCheck, requestError });
+
+            if (requestError || !requestCheck) {
+                console.error('Request not found:', { requestId, requestError });
+                return {
+                    success: false,
+                    message: `Request with ID ${requestId} not found in database`,
+                    details: requestError?.message
+                };
+            }
+
+            if (requestCheck.status !== 'accepted') {
+                console.error('Request not accepted:', { requestId, status: requestCheck.status });
+                return {
+                    success: false,
+                    message: `Request ${requestId} has status '${requestCheck.status}', but 'accepted' is required for chat`
+                };
+            }
+
+            // Test basic supabase connection
+            console.log('Testing supabase connection...');
+            const { count: testCount, error: testError } = await supabase
+                .from('chat_threads')
+                .select('*', { count: 'exact', head: true });
+            console.log('Connection test result:', { testCount, testError });
+
+            if (testError) {
+                console.error('Database connection issue:', testError);
+                return { success: false, message: `Database connection error: ${testError.message}` };
+            }
+
             const insertData: ChatThreadInsert = {
                 request_id: requestId,
                 participant_user_ids: participantUserIds,
@@ -108,44 +159,128 @@ export const chatService = {
                 completed_user_ids: []
             };
 
+            console.log('Insert data for chat thread:', insertData);
+            console.log('Insert data types:', {
+                request_id_type: typeof requestId,
+                participant_user_ids_type: typeof participantUserIds,
+                participant_user_ids_array: Array.isArray(participantUserIds),
+                participant_user_ids_length: participantUserIds?.length
+            });
+
+            console.log('Attempting supabase insert...');
             const { data, error } = await supabase
                 .from('chat_threads')
                 .insert(insertData)
                 .select()
                 .single();
 
+            console.log('Supabase insert result:', { data, error });
+
             if (error) {
-                console.error('Error creating chat thread:', error);
-                return { success: false, message: error.message };
+                console.error('=== CHAT THREAD CREATE ERROR ===');
+                console.error('Error details:', {
+                    message: error.message,
+                    details: error.details,
+                    hint: error.hint,
+                    code: error.code
+                });
+                return { success: false, message: `Database error: ${error.message}` };
             }
 
             const thread = dbRowToChatThread(data);
+            console.log('Created thread successfully:', thread);
+            console.log('=== CREATE CHAT THREAD SUCCESS ===');
             return { success: true, data: thread };
         } catch (error) {
-            console.error('Error in createChatThread:', error);
-            return { success: false, message: 'An unexpected error occurred' };
+            console.error('=== UNEXPECTED ERROR IN CREATE CHAT THREAD ===');
+            console.error('Caught exception:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
+            return { success: false, message: `Unexpected error: ${error.message}` };
         }
     },
 
     // Get or create chat thread for a request
-    getOrCreateChatThread: async (requestId: number, participantUserIds: string[]) => {
+    getOrCreateChatThread: async (requestId: number, participantUserIds?: string[]) => {
         try {
-            // First try to find existing thread
-            const { data: existingThread, error: searchError } = await supabase
+            console.log('getOrCreateChatThread called with:', { requestId, participantUserIds });
+
+            // If participant IDs are not provided, fetch them from the request
+            let actualParticipantIds = participantUserIds;
+            if (!actualParticipantIds || actualParticipantIds.length === 0) {
+                console.log('Fetching participant IDs from request...');
+                const { data: request, error: requestError } = await supabase
+                    .from('swap_requests')
+                    .select('from_user_id, to_user_id')
+                    .eq('id', requestId)
+                    .single();
+
+                if (requestError || !request) {
+                    console.error('Failed to fetch request for participant IDs:', requestError);
+                    return { success: false, message: 'Could not find request to determine participants' };
+                }
+
+                actualParticipantIds = [request.from_user_id, request.to_user_id];
+                console.log('Fetched participant IDs from request:', actualParticipantIds);
+            }
+
+            // Use upsert to ensure only one thread per request
+            // First, try to find existing thread with more comprehensive search
+            const { data: existingThreads, error: searchError } = await supabase
                 .from('chat_threads')
                 .select('*')
                 .eq('request_id', requestId)
-                .single();
+                .order('created_at', { ascending: true }); // Get oldest first
 
-            if (!searchError && existingThread) {
-                return { success: true, data: dbRowToChatThread(existingThread) };
+            console.log('Search for existing threads result:', { existingThreads, searchError });
+
+            if (!searchError && existingThreads && existingThreads.length > 0) {
+                // If multiple threads exist (shouldn't happen but let's handle it), return the first one
+                if (existingThreads.length > 1) {
+                    console.warn(`Multiple threads found for request ${requestId}, returning the first one`);
+                }
+                console.log('Found existing thread, returning it');
+                return { success: true, data: dbRowToChatThread(existingThreads[0]) };
             }
 
-            // Create new thread if none exists
-            return await chatService.createChatThread(requestId, participantUserIds);
+            // Try to create a new thread with conflict resolution
+            console.log('No existing thread found, creating new one');
+            const { data: newThread, error: insertError } = await supabase
+                .from('chat_threads')
+                .insert({
+                    request_id: requestId,
+                    participant_user_ids: actualParticipantIds,
+                    is_completed: false,
+                    completed_user_ids: []
+                })
+                .select()
+                .single();
+
+            if (insertError) {
+                // If insert failed due to conflict, try to get existing thread again
+                if (insertError.code === '23505') { // Unique violation
+                    console.log('Thread creation conflict, fetching existing thread');
+                    const { data: existingThread, error: retryError } = await supabase
+                        .from('chat_threads')
+                        .select('*')
+                        .eq('request_id', requestId)
+                        .single();
+
+                    if (!retryError && existingThread) {
+                        return { success: true, data: dbRowToChatThread(existingThread) };
+                    }
+                }
+                console.error('Error creating thread:', insertError);
+                return { success: false, message: insertError.message };
+            }
+
+            console.log('Successfully created new thread:', newThread);
+            return { success: true, data: dbRowToChatThread(newThread) };
         } catch (error) {
             console.error('Error in getOrCreateChatThread:', error);
-            return { success: false, message: 'An unexpected error occurred' };
+            return { success: false, message: `Chat error: ${error.message}` };
         }
     },
 
@@ -212,10 +347,7 @@ export const chatService = {
 
             const { data, error } = await supabase
                 .from('chat_messages')
-                .select(`
-          *,
-          sender:users!chat_messages_sender_user_id_fkey(name, avatar)
-        `)
+                .select('*')
                 .eq('thread_id', threadId)
                 .order('created_at', { ascending: true })
                 .range(offset, offset + limit - 1);
@@ -225,10 +357,7 @@ export const chatService = {
                 return { success: false, message: error.message };
             }
 
-            const messages = data?.map(row => ({
-                ...dbRowToChatMessage(row),
-                sender: row.sender
-            })) || [];
+            const messages = data?.map(row => dbRowToChatMessage(row)) || [];
 
             return { success: true, data: messages };
         } catch (error) {
@@ -280,6 +409,26 @@ export const chatService = {
         } catch (error) {
             console.error('Error in markChatCompleted:', error);
             return { success: false, message: 'An unexpected error occurred' };
+        }
+    },
+
+    // Get user details for chat display (names, avatars)
+    getChatParticipantDetails: async (userIds: string[]) => {
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id, name, avatar')
+                .in('id', userIds);
+
+            if (error) {
+                console.error('Error fetching user details:', error);
+                return { success: false, message: error.message };
+            }
+
+            return { success: true, data: data || [] };
+        } catch (error) {
+            console.error('Error in getChatParticipantDetails:', error);
+            return { success: false, message: 'Failed to load user details' };
         }
     },
 

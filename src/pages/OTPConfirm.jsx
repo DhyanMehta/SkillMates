@@ -58,12 +58,15 @@ const OTPConfirm = () => {
                     });
                 }, 2000);
             } else {
+                console.log('❌ OTP verification failed:', result.message);
                 setError(result.message || 'Invalid OTP. Please try again.');
             }
         } catch (error) {
+            console.error('💥 OTP verification error:', error);
             setError('Verification failed. Please try again.');
         } finally {
             setLoading(false);
+            console.log('🏁 OTP verification completed');
         }
     };
 

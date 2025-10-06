@@ -5,7 +5,7 @@ type SwapRequestRow = Database['public']['Tables']['swap_requests']['Row'];
 type SwapRequestInsert = Database['public']['Tables']['swap_requests']['Insert'];
 type SwapRequestUpdate = Database['public']['Tables']['swap_requests']['Update'];
 
-export type SwapStatus = "pending" | "accepted" | "rejected" | "cancelled";
+export type SwapStatus = "pending" | "accepted" | "rejected" | "cancelled" | "completed";
 
 export interface SwapRequest {
     id: number;
@@ -208,6 +208,14 @@ export const requestService = {
 
     addRating: async (requestId: number, rating: number, feedback: string, fromSender: boolean, userId: string) => {
         try {
+            console.log('🔄 DEBUG: addRating called with:', {
+                requestId,
+                rating,
+                feedback,
+                fromSender,
+                userId
+            });
+
             const updateData: SwapRequestUpdate = fromSender ? {
                 rating_from_sender: rating,
                 feedback_from_sender: feedback
@@ -215,6 +223,8 @@ export const requestService = {
                 rating_from_recipient: rating,
                 feedback_from_recipient: feedback
             };
+
+            console.log('📝 DEBUG: Updating swap_requests with:', updateData);
 
             const { data, error } = await supabase
                 .from('swap_requests')
@@ -225,16 +235,20 @@ export const requestService = {
                 .single();
 
             if (error) {
-                console.error('Error adding rating:', error);
+                console.error('❌ DEBUG: Error adding rating to swap_requests:', error);
                 return { success: false, message: error.message };
             }
 
+            console.log('✅ DEBUG: Rating added to swap_requests:', data);
+
             // Update user's overall rating
-            await updateUserRating(fromSender ? data.to_user_id : data.from_user_id);
+            const targetUserId = fromSender ? data.to_user_id : data.from_user_id;
+            console.log('🎯 DEBUG: Updating overall rating for user:', targetUserId);
+            await updateUserRating(targetUserId);
 
             return { success: true, data: dbRowToSwapRequest(data) };
         } catch (error) {
-            console.error('Error in addRating:', error);
+            console.error('❌ DEBUG: Error in addRating:', error);
             return { success: false, message: 'An unexpected error occurred' };
         }
     },
@@ -287,12 +301,88 @@ export const requestService = {
             console.error('Error in getRequestById:', error);
             return { success: false, message: 'An unexpected error occurred' };
         }
+    },
+
+    getAcceptedRequests: async (userId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('swap_requests')
+                .select(`
+                    *,
+                    from_user:users!swap_requests_from_user_id_fkey(name, avatar),
+                    to_user:users!swap_requests_to_user_id_fkey(name, avatar)
+                `)
+                .eq('status', 'accepted')
+                .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+                .order('updated_at', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching accepted requests:', error);
+                return { success: false, message: error.message };
+            }
+
+            const requests = data?.map(row => ({
+                ...dbRowToSwapRequest(row),
+                fromUser: row.from_user,
+                toUser: row.to_user
+            })) || [];
+
+            return { success: true, data: requests };
+        } catch (error) {
+            console.error('Error in getAcceptedRequests:', error);
+            return { success: false, message: 'An unexpected error occurred' };
+        }
+    },
+
+    // Mark request as completed
+    markRequestCompleted: async (requestId: number, userId: string) => {
+        try {
+            // First verify user is part of this request
+            const { data: request, error: fetchError } = await supabase
+                .from('swap_requests')
+                .select('from_user_id, to_user_id, status')
+                .eq('id', requestId)
+                .single();
+
+            if (fetchError || !request) {
+                return { success: false, message: 'Request not found' };
+            }
+
+            if (request.from_user_id !== userId && request.to_user_id !== userId) {
+                return { success: false, message: 'Not authorized to complete this request' };
+            }
+
+            if (request.status !== 'accepted') {
+                return { success: false, message: 'Only accepted requests can be marked as completed' };
+            }
+
+            // Update request status to completed
+            const { error: updateError } = await supabase
+                .from('swap_requests')
+                .update({
+                    status: 'completed',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', requestId);
+
+            if (updateError) {
+                console.error('Error marking request as completed:', updateError);
+                return { success: false, message: updateError.message };
+            }
+
+            return { success: true, message: 'Request marked as completed' };
+        } catch (error) {
+            console.error('Error in markRequestCompleted:', error);
+            return { success: false, message: 'An unexpected error occurred' };
+        }
     }
 };
 
 // Helper function to update user's overall rating
 async function updateUserRating(userId: string) {
     try {
+        console.log('🔄 DEBUG: Starting updateUserRating for user:', userId);
+
         // Get all ratings for this user
         const { data: sentRatings } = await supabase
             .from('swap_requests')
@@ -306,25 +396,71 @@ async function updateUserRating(userId: string) {
             .eq('to_user_id', userId)
             .not('rating_from_sender', 'is', null);
 
+        console.log('📊 DEBUG: Retrieved ratings:', {
+            sentRatings,
+            receivedRatings
+        });
+
         const allRatings = [
             ...(sentRatings?.map(r => r.rating_from_recipient) || []),
             ...(receivedRatings?.map(r => r.rating_from_sender) || [])
         ].filter(rating => rating !== null) as number[];
 
+        console.log('🎯 DEBUG: All ratings combined:', allRatings);
+
         if (allRatings.length > 0) {
             const averageRating = allRatings.reduce((sum, rating) => sum + rating, 0) / allRatings.length;
 
+            console.log('🧮 DEBUG: Calculated rating:', {
+                totalRatings: allRatings.length,
+                averageRating,
+                roundedRating: Number(averageRating.toFixed(2))
+            });
+
+            // First check if user exists in users table
+            const { data: existingUser, error: checkError } = await supabase
+                .from('users')
+                .select('id, name, rating, reviews')
+                .eq('id', userId)
+                .single();
+
+            if (checkError) {
+                console.error('❌ DEBUG: User not found in users table:', checkError);
+                console.log('⚠️ DEBUG: User needs to be created in users table first');
+                return;
+            }
+
+            console.log('👤 DEBUG: Found existing user:', existingUser);
+
             // Update user's rating and review count
-            await supabase
+            const { data, error } = await supabase
                 .from('users')
                 .update({
                     rating: Number(averageRating.toFixed(2)),
                     reviews: allRatings.length
                 })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select();
+
+            if (error) {
+                console.error('❌ DEBUG: Error updating user rating in database:', error);
+            } else {
+                console.log('✅ DEBUG: User rating updated successfully:', data);
+
+                // Verify the update worked
+                const { data: verifyUser } = await supabase
+                    .from('users')
+                    .select('id, name, rating, reviews')
+                    .eq('id', userId)
+                    .single();
+
+                console.log('🔍 DEBUG: Verified updated user data:', verifyUser);
+            }
+        } else {
+            console.log('⚠️ DEBUG: No ratings found for user:', userId);
         }
     } catch (error) {
-        console.error('Error updating user rating:', error);
+        console.error('❌ DEBUG: Error in updateUserRating:', error);
     }
 }
 

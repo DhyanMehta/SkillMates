@@ -11,9 +11,10 @@ const SkillTag = ({ skill, variant = 'default', className = '' }) => {
   };
 
   return (
-    <Badge 
-      variant="outline" 
+    <Badge
+      variant="outline"
       className={`${variants[variant]} ${className} transition-smooth`}
+      title={skill} // Show full text on hover
     >
       {skill}
     </Badge>

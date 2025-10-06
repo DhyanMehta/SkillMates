@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Mail, Lock, UserPlus, Loader2, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,12 +10,31 @@ import { useAuth } from '@/context/AuthContext'
 const AuthSignup = () => {
   const navigate = useNavigate()
   const { toast } = useToast()
-  const { signUp } = useAuth()
+  const { signUp, user, loading: authLoading } = useAuth()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate('/home', { replace: true })
+    }
+  }, [user, authLoading, navigate])
+
+  // Show loading spinner while checking auth status
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   const handleEmailSignup = async (e) => {
     e.preventDefault()
@@ -32,15 +51,23 @@ const AuthSignup = () => {
         throw new Error(result.message || result.error)
       }
 
-      // Store email for OTP verification
-      localStorage.setItem('signup_email', email)
-
-      toast({
-        title: 'Check your email!',
-        description: 'We sent you a verification code. Please check your inbox.'
-      })
-
-      navigate(`/verify-otp?email=${encodeURIComponent(email)}`)
+      // Check if email verification is needed
+      if (result.needsEmailVerification === true) {
+        // Email confirmation is enabled - redirect to OTP verification
+        localStorage.setItem('signup_email', email)
+        toast({
+          title: 'Check your email!',
+          description: 'We sent you a verification code. Please check your inbox.'
+        })
+        navigate(`/verify-otp?email=${encodeURIComponent(email)}`)
+      } else {
+        // Email confirmation is disabled - user is already logged in
+        toast({
+          title: 'Account created successfully!',
+          description: 'Welcome to SkillMates! You are now logged in.'
+        })
+        navigate('/home') // Redirect to home page for logged in users
+      }
     } catch (err) {
       const msg = String(err?.message || '')
       const friendly = /already|exists|duplicate/i.test(msg)

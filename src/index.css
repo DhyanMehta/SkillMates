@@ -127,11 +127,11 @@
   .gradient-primary {
     background: var(--gradient-primary);
   }
-  
+
   .gradient-card {
     background: var(--gradient-card);
   }
-  
+
   .gradient-hero {
     background: var(--gradient-hero);
   }
@@ -139,11 +139,11 @@
   .shadow-glow {
     box-shadow: var(--shadow-glow);
   }
-  
+
   .shadow-card {
     box-shadow: var(--shadow-card);
   }
-  
+
   .shadow-hover {
     box-shadow: var(--shadow-hover);
   }
@@ -151,7 +151,7 @@
   .transition-smooth {
     transition: var(--transition-smooth);
   }
-  
+
   .transition-spring {
     transition: var(--transition-spring);
   }
@@ -163,11 +163,15 @@
   .status-pending {
     @apply bg-warning/10 text-warning border border-warning/20;
   }
-  
+
   .status-accepted {
     @apply bg-success/10 text-success border border-success/20;
   }
-  
+
+  .status-completed {
+    @apply bg-blue-500/10 text-blue-600 border border-blue-500/20;
+  }
+
   .status-rejected {
     @apply bg-destructive/10 text-destructive border border-destructive/20;
   }
@@ -178,5 +182,35 @@
 
   .glass-effect {
     @apply bg-card/50 backdrop-blur-sm border border-border/50;
+  }
+
+  /* Equal height grid for user cards */
+  .user-grid {
+    display: grid;
+    grid-template-rows: masonry;
+  }
+
+  @supports not (grid-template-rows: masonry) {
+    .user-grid {
+      grid-auto-rows: 1fr;
+    }
+  }
+
+  /* Enhanced card layout */
+  .user-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .user-card-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .user-card-skills {
+    flex: 1;
+    overflow: hidden;
   }
 }

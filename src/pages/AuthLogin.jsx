@@ -11,10 +11,17 @@ const AuthLogin = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { toast } = useToast()
-  const { signIn } = useAuth()
+  const { signIn, user, loading: authLoading } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate('/home', { replace: true })
+    }
+  }, [user, authLoading, navigate])
 
   useEffect(() => {
     // Show success message if redirected from OTP verification
@@ -31,6 +38,18 @@ const AuthLogin = () => {
     }
   }, [location.state, toast, navigate, location.pathname])
 
+  // Show loading spinner while checking auth status
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
   const handleEmailLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -38,6 +57,16 @@ const AuthLogin = () => {
     try {
       const result = await signIn(email, password)
       if (!result.success) throw new Error(result.message || 'Invalid credentials')
+
+      // Check if user needs email verification (like the working Next.js implementation)
+      if (result.needsEmailVerification) {
+        toast({
+          title: 'Email verification required',
+          description: 'Please verify your email before continuing.'
+        })
+        navigate(`/verify-otp?email=${encodeURIComponent(result.data.email)}`)
+        return
+      }
 
       toast({ title: 'Welcome back!', description: 'Logged in successfully.' })
       navigate('/home')

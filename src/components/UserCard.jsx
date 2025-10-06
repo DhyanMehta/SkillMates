@@ -5,6 +5,17 @@ import SkillTag from './SkillTag';
 const UserCard = ({ user, onRequest, isLoggedIn, currentUserId }) => {
   const isOwnProfile = currentUserId === user.id;
 
+  // Debug log to see what user data we're getting
+  console.log('🃏 DEBUG: UserCard received user data:', {
+    name: user.name,
+    rating: user.rating,
+    reviews: user.reviews,
+    rating_type: typeof user.rating,
+    reviews_type: typeof user.reviews,
+    rating_display: user.rating || 0,
+    reviews_display: user.reviews || 0
+  });
+
   const renderStars = (rating) => {
     const stars = [];
     const fullStars = Math.floor(rating);
@@ -27,10 +38,10 @@ const UserCard = ({ user, onRequest, isLoggedIn, currentUserId }) => {
   };
 
   return (
-    <div className="gradient-card rounded-xl p-6 shadow-card hover-lift transition-smooth border border-border/20">
+    <div className="user-card gradient-card rounded-xl p-6 shadow-card hover-lift transition-smooth border border-border/20">
       {/* Header with Avatar and Basic Info */}
       <div className="flex items-start space-x-4 mb-4">
-        <div className="relative">
+        <div className="relative flex-shrink-0">
           <img
             src={user.avatar}
             alt={user.name}
@@ -46,7 +57,7 @@ const UserCard = ({ user, onRequest, isLoggedIn, currentUserId }) => {
 
           {user.location && (
             <div className="flex items-center text-sm text-muted-foreground mt-1">
-              <MapPin className="w-3 h-3 mr-1" />
+              <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
               <span className="truncate">{user.location}</span>
             </div>
           )}
@@ -56,54 +67,62 @@ const UserCard = ({ user, onRequest, isLoggedIn, currentUserId }) => {
               {renderStars(user.rating || 0)}
             </div>
             <span className="text-sm font-medium text-foreground">
-              {user.rating || 0}
+              {(user.rating || 0).toFixed(1)}
             </span>
             <span className="text-sm text-muted-foreground">
-              ({user.total_reviews || 0} reviews)
+              ({user.reviews || 0} {(user.reviews || 0) === 1 ? 'review' : 'reviews'})
             </span>
           </div>
         </div>
       </div>
 
-      {/* Skills Section */}
-      <div className="space-y-3 mb-4">
-        <div>
-          <h4 className="text-sm font-medium text-foreground mb-2">Skills Offered</h4>
-          <div className="flex flex-wrap gap-2">
-            {(user.skills_offered || []).map((skill, index) => (
-              <SkillTag key={index} skill={skill} variant="offered" />
-            ))}
+      {/* Skills Section - Dynamic but contained */}
+      <div className="user-card-content">
+        <div className="user-card-skills space-y-4 mb-4">
+          <div>
+            <h4 className="text-sm font-medium text-foreground mb-2">Skills Offered</h4>
+            <div className="flex flex-wrap gap-2">
+              {(user.skillsOffered || []).map((skill, index) => (
+                <SkillTag key={index} skill={skill} variant="offered" />
+              ))}
+              {(user.skillsOffered || []).length === 0 && (
+                <span className="text-xs text-muted-foreground italic">No skills offered yet</span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-medium text-foreground mb-2">Skills Wanted</h4>
+            <div className="flex flex-wrap gap-2">
+              {(user.skillsWanted || []).map((skill, index) => (
+                <SkillTag key={index} skill={skill} variant="wanted" />
+              ))}
+              {(user.skillsWanted || []).length === 0 && (
+                <span className="text-xs text-muted-foreground italic">No skills wanted yet</span>
+              )}
+            </div>
           </div>
         </div>
 
-        <div>
-          <h4 className="text-sm font-medium text-foreground mb-2">Skills Wanted</h4>
-          <div className="flex flex-wrap gap-2">
-            {(user.skills_wanted || []).map((skill, index) => (
-              <SkillTag key={index} skill={skill} variant="wanted" />
-            ))}
+        {/* Availability and Action - Fixed at bottom */}
+        <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/10">
+          <div className="flex items-center text-sm text-muted-foreground">
+            <Clock className="w-4 h-4 mr-1 flex-shrink-0" />
+            <span className="truncate">{user.availability}</span>
           </div>
-        </div>
-      </div>
 
-      {/* Availability and Action */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center text-sm text-muted-foreground">
-          <Clock className="w-4 h-4 mr-1" />
-          <span>{user.availability}</span>
+          {!isOwnProfile && (
+            <Button
+              size="sm"
+              onClick={() => onRequest(user)}
+              disabled={!isLoggedIn}
+              className="gradient-primary text-primary-foreground shadow-glow disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Request
+            </Button>
+          )}
         </div>
-
-        {!isOwnProfile && (
-          <Button
-            size="sm"
-            onClick={() => onRequest(user)}
-            disabled={!isLoggedIn}
-            className="gradient-primary text-primary-foreground shadow-glow disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="w-4 h-4 mr-2" />
-            Request
-          </Button>
-        )}
       </div>
     </div>
   );

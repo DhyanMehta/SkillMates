@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import UserCard from '../components/UserCard';
 import Pagination from '../components/Pagination';
 import { availabilityOptions } from '../data/sampleData';
-import { getAllUsers } from '../services/userService';
+import userService from '../services/supabaseUserService';
 
 const Home = ({ isLoggedIn, currentUserId }) => {
   const navigate = useNavigate();
@@ -20,38 +20,63 @@ const Home = ({ isLoggedIn, currentUserId }) => {
 
   // Load users from Supabase
   useEffect(() => {
-    const loadUsers = async () => {
-      setLoading(true);
-      try {
-        const allUsers = await getAllUsers();
-        setUsers(allUsers);
-      } catch (error) {
-        console.error('Error loading users:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadUsers();
+  }, []);
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      console.log('🔄 DEBUG: Home.jsx - Loading users for homepage...');
+      const result = await userService.getAllUsers();
+      if (result.success) {
+        console.log('✅ DEBUG: Home.jsx - Users loaded successfully:', result.data.length, 'users');
+        console.log('📊 DEBUG: Home.jsx - Users with ratings:');
+        result.data.forEach(user => {
+          console.log(`   - ${user.name}: rating=${user.rating}, reviews=${user.reviews}`);
+        });
+        setUsers(result.data);
+      } else {
+        console.error('❌ DEBUG: Home.jsx - Error loading users:', result.message);
+        setUsers([]);
+      }
+
+    } catch (error) {
+      console.error('❌ DEBUG: Home.jsx - Exception loading users:', error);
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Expose refresh function globally for other components to trigger
+  useEffect(() => {
+    window.refreshHomepageUsers = loadUsers;
+    return () => {
+      delete window.refreshHomepageUsers;
+    };
   }, []);
 
   // Filter and search logic
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
-      if (!user.is_public) return false;
-      if (user.is_banned) return false;
-      if (user.is_profile_approved === false) return false;
+      // Exclude current user from results
+      if (currentUserId && user.id === currentUserId) {
+        return false;
+      }
+
+      // Note: Backend already filters for isPublic=true and isBanned=false, 
+      // so no need to filter again here
 
       const matchesSearch = !searchQuery ||
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (user.skills_offered || []).some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (user.skills_wanted || []).some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
+        (user.skillsOffered || []).some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (user.skillsWanted || []).some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
 
       const matchesAvailability = availabilityFilter === 'all' || user.availability === availabilityFilter;
 
       return matchesSearch && matchesAvailability;
     });
-  }, [users, searchQuery, availabilityFilter]);
+  }, [users, searchQuery, availabilityFilter, currentUserId]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -152,7 +177,7 @@ const Home = ({ isLoggedIn, currentUserId }) => {
             {/* Users Grid */}
             {paginatedUsers.length > 0 ? (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <div className="user-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                   {paginatedUsers.map(user => (
                     <UserCard
                       key={user.id}
