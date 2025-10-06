@@ -1,14 +1,35 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "skillmates",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "description": "A skill exchange platform where users can teach and learn from each other",
+  "keywords": [
+    "react",
+    "vite",
+    "typescript",
+    "supabase",
+    "skill-sharing",
+    "education"
+  ],
+  "author": "DhyanMehta",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DhyanMehta/SkillMates.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "build:prod": "vite build --mode production",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "lint:fix": "eslint . --fix",
+    "preview": "vite preview",
+    "start": "vite preview",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "deploy:vercel": "npm run build && vercel --prod",
+    "deploy:netlify": "npm run build && netlify deploy --prod --dir=dist"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -81,6 +102,7 @@
     "lovable-tagger": "^1.1.9",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "terser": "^5.44.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19"
