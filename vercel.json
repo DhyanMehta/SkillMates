@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "name": "skillmates",
+  "name": "skillmates-exchange-platform",
   "builds": [
     {
       "src": "package.json",
