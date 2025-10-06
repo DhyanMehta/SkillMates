@@ -14,44 +14,56 @@ This guide covers deployment options for the SkillMates application.
 
 ### 1. Vercel (Recommended)
 
-1. **Install Vercel CLI** (optional):
+1. **GitHub Integration** (Recommended):
+   - Go to [Vercel Dashboard](https://vercel.com/dashboard)
+   - Click "New Project"
+   - Import your GitHub repository
+   - Vercel will automatically detect it's a Vite project
+
+2. **Environment Variables Setup**:
+   - In Vercel Dashboard → Project Settings → Environment Variables
+   - Add the following variables:
+     - `VITE_SUPABASE_URL` → Your Supabase project URL
+     - `VITE_SUPABASE_ANON_KEY` → Your Supabase anonymous key
+   - Make sure to add them for all environments (Production, Preview, Development)
+
+3. **Manual Deployment** (optional):
    ```bash
    npm install -g vercel
+   npm run build
+   vercel --prod
    ```
 
-2. **GitHub Integration**:
-   - Connect your GitHub repository to Vercel
-   - Vercel will automatically deploy on every push to main branch
-
-3. **Manual Deployment**:
-   ```bash
-   npm run deploy:vercel
-   ```
-
-4. **Environment Variables**:
-   - Go to Vercel Dashboard → Project Settings → Environment Variables
-   - Add your Supabase credentials
+4. **Automatic Deployments**:
+   - Every push to `main` branch will trigger automatic deployment
+   - Pull requests will create preview deployments
 
 ### 2. Netlify
 
-1. **Install Netlify CLI** (optional):
+1. **GitHub Integration** (Recommended):
+   - Go to [Netlify Dashboard](https://app.netlify.com/)
+   - Click "New site from Git"
+   - Connect to GitHub and select your repository
+   - Build settings:
+     - Build command: `npm run build`
+     - Publish directory: `dist`
+
+2. **Environment Variables Setup**:
+   - In Netlify Dashboard → Site Settings → Environment Variables
+   - Add the following variables:
+     - `VITE_SUPABASE_URL` → Your Supabase project URL
+     - `VITE_SUPABASE_ANON_KEY` → Your Supabase anonymous key
+
+3. **Manual Deployment** (optional):
    ```bash
    npm install -g netlify-cli
+   npm run build
+   netlify deploy --prod --dir=dist
    ```
 
-2. **GitHub Integration**:
-   - Connect your GitHub repository to Netlify
-   - Set build command: `npm run build`
-   - Set publish directory: `dist`
-
-3. **Manual Deployment**:
-   ```bash
-   npm run deploy:netlify
-   ```
-
-4. **Environment Variables**:
-   - Go to Netlify Dashboard → Site Settings → Environment Variables
-   - Add your Supabase credentials
+4. **Automatic Deployments**:
+   - Every push to `main` branch will trigger automatic deployment
+   - Pull requests will create deploy previews
 
 ### 3. Other Platforms
 
