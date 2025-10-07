@@ -66,5 +66,5 @@ export const requestsApi = {
     getAllRequests: async () => requestService.getRequests(),
     createRequest: async (requestData: any) => requestService.createRequest(requestData),
     updateRequestStatus: async (requestId: any, status: any) => requestService.updateRequestStatus(requestId, status),
-    deleteRequest: async (requestId: any) => requestService.deleteRequest(requestId)
+    deleteRequest: async (requestId: any, userId: string) => requestService.deleteRequest(requestId, userId)
 };

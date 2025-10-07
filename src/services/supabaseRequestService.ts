@@ -255,11 +255,12 @@ export const requestService = {
 
     deleteRequest: async (requestId: number, userId: string) => {
         try {
+            // Allow deletion if user is either the sender or recipient
             const { error } = await supabase
                 .from('swap_requests')
                 .delete()
                 .eq('id', requestId)
-                .eq('from_user_id', userId); // Only allow deleting own requests
+                .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`);
 
             if (error) {
                 console.error('Error deleting request:', error);

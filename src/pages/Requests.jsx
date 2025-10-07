@@ -305,7 +305,11 @@ const Requests = ({ isLoggedIn }) => {
 
   const handleDelete = async (requestId) => {
     try {
-      const result = await requestService.deleteRequest(requestId);
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      const result = await requestService.deleteRequest(requestId, user.id);
       if (result.success) {
         // Update local state
         setRequests(prev => prev.filter(req => req.id !== requestId));
